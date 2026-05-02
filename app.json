@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Safe Delivery Rider",
+    "slug": "safe-delivery-rider",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1F4B"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.safedelivery.rider",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is needed to capture selfie verification and delivery proof photos.",
+        "NSLocationWhenInUseUsageDescription": "Location is needed to share live position with customers during deliveries.",
+        "NSPhotoLibraryUsageDescription": "Photo library access needed for uploading KYC documents."
+      }
+    },
+    "android": {
+      "package": "com.safedelivery.rider",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B1F4B"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        { "cameraPermission": "Allow Safe Delivery to access camera for selfie and delivery photos." }
+      ],
+      [
+        "expo-location",
+        { "locationAlwaysAndWhenInUsePermission": "Allow Safe Delivery to use location to share with customers during deliveries." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "Allow Safe Delivery to access photos for KYC documents." }
+      ],
+      "expo-asset",
+      "expo-font"
+    ],
+    "sdkVersion": "54.0.0"
+  }
+}
