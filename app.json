@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0B1F4B"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.safedelivery.rider",
@@ -30,24 +32,45 @@
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
       [
         "expo-camera",
-        { "cameraPermission": "Allow Safe Delivery to access camera for selfie and delivery photos." }
+        {
+          "cameraPermission": "Allow Safe Delivery to access camera for selfie and delivery photos."
+        }
       ],
       [
         "expo-location",
-        { "locationAlwaysAndWhenInUsePermission": "Allow Safe Delivery to use location to share with customers during deliveries." }
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Safe Delivery to use location to share with customers during deliveries."
+        }
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "Allow Safe Delivery to access photos for KYC documents." }
+        {
+          "photosPermission": "Allow Safe Delivery to access photos for KYC documents."
+        }
       ],
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1B4FD8",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Safe Delivery Rider",
+          "iosDisplayInForeground": true
+        }
+      ],
+      "expo-audio"
     ],
     "sdkVersion": "54.0.0"
   }

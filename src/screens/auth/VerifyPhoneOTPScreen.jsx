@@ -1,85 +1,246 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, TextInput,
+  TouchableOpacity, ScrollView,
+} from 'react-native';
 import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
-import Screen   from '../../components/Screen';
-import Button   from '../../components/Button';
-import OTPInput from '../../components/OTPInput';
-import { riderVerifyPhoneOTP, riderResendOTP } from '../../api';
+import Screen from '../../components/Screen';
+import Button from '../../components/Button';
+import { riderVerifyPhoneOTP, riderVerifyEmailOTP, riderResendEmailOTP } from '../../api';
 import useAuthStore from '../../store/authStore';
 import { COLORS, SIZES } from '../../theme';
-import { errMsg, maskPhone } from '../../utils/helpers';
 
-export default function VerifyPhoneOTPScreen({ navigation, route }) {
-  const { riderId, phone } = route.params || {};
-  const [otp,       setOtp]       = useState('');
-  const [verifying, setVerifying] = useState(false);
-  const [resending, setResending] = useState(false);
-  const [cooldown,  setCooldown]  = useState(60);
-  const { setAuth, refreshRider } = useAuthStore();
+let firebaseAuth = null;
+let FirebasePhoneAuthProvider = null;
+let firebaseSignInWithCredential = null;
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(id);
-  }, [cooldown]);
+try {
+  const fb = require('../../config/firebase');
+  firebaseAuth = fb.auth;
+  FirebasePhoneAuthProvider = fb.PhoneAuthProvider;
+  firebaseSignInWithCredential = fb.signInWithCredential;
+} catch (e) {
+  console.warn('[Firebase Rider] Not loaded:', e.message);
+}
 
-  const handleVerify = async () => {
-    if (otp.length !== 4) return Toast.show({ type: 'error', text1: 'Enter the 4-digit code' });
-    setVerifying(true);
-    try {
-      const res = await riderVerifyPhoneOTP({ riderId, otp });
-      const { token, rider } = res.data.data;
-      await setAuth(token, rider);
-      await refreshRider();
-    } catch (e) {
-      Toast.show({ type: 'error', text1: errMsg(e, 'Invalid OTP') });
-    } finally { setVerifying(false); }
+const maskPhone = (p = '') => p.length > 6 ? p.slice(0, 5) + '****' + p.slice(-2) : p;
+
+function OTPBox({ value, onChange, length = 4 }) {
+  const inputs = useRef([]);
+  const vals   = Array(length).fill('').map((_, i) => value[i] || '');
+
+  const handleChange = (v, idx) => {
+    const digit = v.replace(/\D/g, '').slice(-1);
+    const next  = [...vals]; next[idx] = digit;
+    onChange(next.join(''));
+    if (digit && idx < length - 1) inputs.current[idx + 1]?.focus();
   };
 
-  const handleResend = async () => {
-    if (cooldown > 0 || !phone) return;
-    setResending(true);
-    try {
-      await riderResendOTP({ phone });
-      setCooldown(60);
-      Toast.show({ type: 'success', text1: 'OTP sent again' });
-    } catch (e) {
-      Toast.show({ type: 'error', text1: errMsg(e, 'Could not resend') });
-    } finally { setResending(false); }
+  const handleKey = ({ nativeEvent }, idx) => {
+    if (nativeEvent.key === 'Backspace' && !vals[idx] && idx > 0) inputs.current[idx - 1]?.focus();
   };
 
   return (
-    <Screen scroll bg={COLORS.white}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginBottom: SIZES.xl }}>
-        <Ionicons name="arrow-back" size={22} color={COLORS.gray700} />
-      </TouchableOpacity>
-      <View style={styles.iconBox}><Ionicons name="chatbubble-ellipses-outline" size={36} color={COLORS.primary} /></View>
-      <Text style={styles.title}>Verify Your Phone</Text>
-      <Text style={styles.sub}>We sent a 4-digit code to{' '}<Text style={styles.phone}>{maskPhone(phone)}</Text></Text>
-      <OTPInput value={otp} onChange={setOtp} length={4} />
-      <Button title="Verify" onPress={handleVerify} loading={verifying} disabled={otp.length !== 4} size="lg" style={{ marginTop: SIZES.lg }} />
-      <View style={styles.resendRow}>
-        <Text style={styles.resendText}>Didn't receive it? </Text>
-        {cooldown > 0 ? (
-          <Text style={styles.timer}>Resend in {cooldown}s</Text>
-        ) : (
-          <TouchableOpacity onPress={handleResend} disabled={resending}>
-            <Text style={styles.link}>{resending ? 'Sending...' : 'Resend'}</Text>
+    <View style={S.otpRow}>
+      {vals.map((d, i) => (
+        <TextInput key={i} ref={(r) => (inputs.current[i] = r)}
+          style={[S.otpBox, d && S.otpFilled]} value={d}
+          onChangeText={(v) => handleChange(v, i)}
+          onKeyPress={(e) => handleKey(e, i)}
+          keyboardType="number-pad" maxLength={1} textAlign="center" />
+      ))}
+    </View>
+  );
+}
+
+export default function VerifyPhoneOTPScreen({ navigation, route }) {
+  const { phone, email, name } = route.params || {};
+  const setAuth = useAuthStore((s) => s.setAuth);
+
+  const [tab,            setTab]            = useState('email');
+  const [phoneOtp,       setPhoneOtp]       = useState('');
+  const [verificationId, setVerificationId] = useState(null);
+  const [sendingPhone,   setSendingPhone]   = useState(false);
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [emailOtp,       setEmailOtp]       = useState('');
+  const [cooldown,       setCooldown]       = useState(60);
+  const [verifyingEmail, setVerifyingEmail] = useState(false);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const sendFirebaseOTP = async () => {
+    if (!firebaseAuth || !FirebasePhoneAuthProvider) {
+      return Toast.show({ type: 'error', text1: 'Firebase not available', text2: 'Use Email OTP.' });
+    }
+    setSendingPhone(true);
+    try {
+      const provider = new FirebasePhoneAuthProvider(firebaseAuth);
+      const vid = await provider.verifyPhoneNumber(
+        phone,
+        firebaseAuth._forceRecaptchaFlowForTesting
+          ? firebaseAuth._forceRecaptchaFlowForTesting
+          : { verify: async () => {} }
+      );
+      setVerificationId(vid);
+      Toast.show({ type: 'success', text1: `SMS sent to ${maskPhone(phone)}` });
+    } catch (e) {
+      console.error('[Firebase] Phone OTP error:', e.code, e.message);
+      let msg = 'Failed to send SMS';
+      if (e.code === 'auth/invalid-phone-number') msg = 'Invalid phone format';
+      else if (e.code === 'auth/too-many-requests') msg = 'Too many requests. Try email OTP.';
+      Toast.show({ type: 'error', text1: msg, text2: 'Use Email OTP instead.' });
+    } finally { setSendingPhone(false); }
+  };
+
+  const handleVerifyPhone = async () => {
+    if (phoneOtp.length !== 6) return Toast.show({ type: 'error', text1: 'Enter 6-digit code' });
+    if (!verificationId) return Toast.show({ type: 'error', text1: 'Send SMS first' });
+    setVerifyingPhone(true);
+    try {
+      const credential = FirebasePhoneAuthProvider.credential(verificationId, phoneOtp);
+      const userCred   = await firebaseSignInWithCredential(firebaseAuth, credential);
+      const idToken    = await userCred.user.getIdToken();
+      const res = await riderVerifyPhoneOTP({ phone, firebaseIdToken: idToken });
+      const { token, rider } = res.data.data;
+      await setAuth(token, rider);
+      Toast.show({ type: 'success', text1: '✅ Phone verified! Account created.' });
+    } catch (e) {
+      let msg = e.response?.data?.message || 'Verification failed';
+      if (e.code === 'auth/invalid-verification-code') msg = 'Wrong code.';
+      Toast.show({ type: 'error', text1: msg });
+    } finally { setVerifyingPhone(false); }
+  };
+
+  const handleVerifyEmail = async () => {
+    if (emailOtp.length !== 4) return Toast.show({ type: 'error', text1: 'Enter 4-digit OTP' });
+    setVerifyingEmail(true);
+    try {
+      const res = await riderVerifyEmailOTP({ phone, email, otp: emailOtp });
+      const { token, rider } = res.data.data;
+      await setAuth(token, rider);
+      Toast.show({ type: 'success', text1: '✅ Email verified! Account created.' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: e.response?.data?.message || 'Invalid OTP' });
+    } finally { setVerifyingEmail(false); }
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0) return;
+    try {
+      await riderResendEmailOTP({ email, name });
+      setCooldown(60); setEmailOtp('');
+      Toast.show({ type: 'success', text1: '📧 OTP resent' });
+    } catch (e) {
+      Toast.show({ type: 'error', text1: e.response?.data?.message || 'Failed' });
+    }
+  };
+
+  return (
+    <Screen bg={COLORS.white}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity onPress={() => navigation.goBack()} style={S.back}>
+          <Ionicons name="arrow-back" size={22} color={COLORS.gray700} />
+        </TouchableOpacity>
+        <View style={S.iconBox}><Ionicons name="shield-checkmark-outline" size={36} color={COLORS.primary} /></View>
+        <Text style={S.title}>Verify Your Account</Text>
+        <Text style={S.sub}>Account created only after verification.</Text>
+
+        <View style={S.tabs}>
+          <TouchableOpacity style={[S.tab, tab === 'email' && S.tabOn]} onPress={() => setTab('email')}>
+            <Ionicons name="mail-outline" size={14} color={tab === 'email' ? COLORS.primary : COLORS.gray400} />
+            <Text style={[S.tabTxt, tab === 'email' && S.tabTxtOn]}>Email OTP</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[S.tab, tab === 'phone' && S.tabOn]} onPress={() => setTab('phone')}>
+            <Ionicons name="phone-portrait-outline" size={14} color={tab === 'phone' ? COLORS.primary : COLORS.gray400} />
+            <Text style={[S.tabTxt, tab === 'phone' && S.tabTxtOn]}>Phone OTP</Text>
+          </TouchableOpacity>
+        </View>
+
+        {tab === 'email' && (
+          <View style={S.panel}>
+            <View style={S.note}>
+              <Ionicons name="mail-outline" size={13} color={COLORS.primary} />
+              <Text style={S.noteTxt}>
+                {'4-digit OTP sent to '}
+                <Text style={{ fontWeight: '700' }}>{email}</Text>
+                {'. Check inbox & spam.'}
+              </Text>
+            </View>
+            <Text style={S.label}>Enter OTP</Text>
+            <OTPBox value={emailOtp} onChange={setEmailOtp} length={4} />
+            <Button title="Verify Email & Create Account" onPress={handleVerifyEmail} loading={verifyingEmail} size="lg" style={S.btn} />
+            <TouchableOpacity onPress={handleResend} disabled={cooldown > 0} style={S.resendWrap}>
+              <Text style={[S.resend, cooldown > 0 && S.resendOff]}>
+                {cooldown > 0 ? `Resend in ${cooldown}s` : '📧 Resend OTP'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
-      </View>
+
+        {tab === 'phone' && (
+          <View style={S.panel}>
+            <View style={S.note}>
+              <Ionicons name="phone-portrait-outline" size={13} color={COLORS.primary} />
+              <Text style={S.noteTxt}>
+                {'6-digit SMS to '}
+                <Text style={{ fontWeight: '700' }}>{maskPhone(phone)}</Text>
+                {'   '}
+              </Text>
+            </View>
+            <Button
+              title={verificationId ? 'Resend SMS' : 'Send SMS Code'}
+              onPress={sendFirebaseOTP} loading={sendingPhone}
+              variant={verificationId ? 'outline' : 'primary'} size="md"
+              style={{ marginBottom: SIZES.lg }}
+            />
+            {verificationId && (
+              <>
+                <Text style={S.label}>Enter 6-digit SMS Code</Text>
+                <OTPBox value={phoneOtp} onChange={setPhoneOtp} length={6} />
+                <Button title="Verify Phone" onPress={handleVerifyPhone} loading={verifyingPhone} size="lg" style={S.btn} />
+              </>
+            )}
+            <View style={S.orRow}><View style={S.orLine} /><Text style={S.orTxt}>or</Text><View style={S.orLine} /></View>
+            <TouchableOpacity onPress={() => setTab('email')} style={S.switchRow}>
+              <Ionicons name="mail-outline" size={14} color={COLORS.primary} />
+              <Text style={S.switchTxt}>Use Email OTP instead</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  iconBox:    { width: 80, height: 80, borderRadius: 24, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginVertical: SIZES.xl },
-  title:      { fontSize: SIZES.fontXxl, fontWeight: '700', color: COLORS.gray900, textAlign: 'center' },
-  sub:        { fontSize: SIZES.fontMd, color: COLORS.gray500, textAlign: 'center', marginTop: SIZES.sm, lineHeight: 22 },
-  phone:      { color: COLORS.gray900, fontWeight: '700' },
-  resendRow:  { flexDirection: 'row', justifyContent: 'center', marginTop: SIZES.xl },
-  resendText: { fontSize: SIZES.fontMd, color: COLORS.gray500 },
-  link:       { fontSize: SIZES.fontMd, color: COLORS.primary, fontWeight: '700' },
-  timer:      { fontSize: SIZES.fontMd, color: COLORS.gray400, fontWeight: '600' },
+const S = StyleSheet.create({
+  back:     { marginBottom: SIZES.xl },
+  iconBox:  { width: 64, height: 64, borderRadius: 16, backgroundColor: COLORS.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: SIZES.lg, alignSelf: 'center' },
+  title:    { fontSize: SIZES.fontXxl, fontWeight: '700', color: COLORS.gray900, textAlign: 'center', marginBottom: 8 },
+  sub:      { fontSize: SIZES.fontMd, color: COLORS.gray500, textAlign: 'center', marginBottom: SIZES.xl },
+  tabs:     { flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: COLORS.gray200, overflow: 'hidden', marginBottom: SIZES.lg },
+  tab:      { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: SIZES.md, backgroundColor: COLORS.gray50 },
+  tabOn:    { backgroundColor: COLORS.primaryLight },
+  tabTxt:   { fontSize: SIZES.fontSm, color: COLORS.gray400, fontWeight: '600' },
+  tabTxtOn: { color: COLORS.primary },
+  panel:    { backgroundColor: COLORS.gray50, borderRadius: 14, padding: SIZES.lg, marginBottom: SIZES.lg },
+  note:     { flexDirection: 'row', alignItems: 'flex-start', gap: 7, backgroundColor: COLORS.primaryLight, borderRadius: 8, padding: SIZES.sm, marginBottom: SIZES.lg },
+  noteTxt:  { flex: 1, fontSize: SIZES.fontXs, color: COLORS.primary, lineHeight: 16 },
+  label:    { fontSize: SIZES.fontSm, fontWeight: '600', color: COLORS.gray700, marginBottom: SIZES.sm },
+  otpRow:   { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: SIZES.md },
+  otpBox:   { width: 46, height: 54, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, fontSize: 20, fontWeight: '700', color: COLORS.gray900, backgroundColor: '#fff', textAlign: 'center' },
+  otpFilled:{ borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
+  btn:       { marginTop: SIZES.sm, marginBottom: SIZES.md },
+  resendWrap:{ alignItems: 'center', paddingVertical: SIZES.sm },
+  resend:    { fontSize: SIZES.fontMd, color: COLORS.primary, fontWeight: '600' },
+  resendOff: { color: COLORS.gray400 },
+  orRow:    { flexDirection: 'row', alignItems: 'center', gap: SIZES.md, marginVertical: SIZES.md },
+  orLine:   { flex: 1, height: 1, backgroundColor: COLORS.gray200 },
+  orTxt:    { fontSize: SIZES.fontSm, color: COLORS.gray400 },
+  switchRow:{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  switchTxt:{ fontSize: SIZES.fontMd, color: COLORS.primary, fontWeight: '600' },
 });

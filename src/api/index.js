@@ -1,18 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// !! Replace 192.168.1.100 with your computer's LAN IP when testing on a real device
-const BASE_URL = __DEV__
-  ? 'http://192.168.29.123:5000/api'
-  : 'https://safe-delivery-backend.onrender.com/api';
+const BASE_URL = 'https://safe-delivery-backend.onrender.com/api';
 
 const TOKEN_KEY = 'sd_rider_token';
 
-const api = axios.create({
-  baseURL: BASE_URL,
-  timeout: 20000,
-  headers: { 'Content-Type': 'application/json' },
-});
+const api = axios.create({ baseURL: BASE_URL, timeout: 20000, headers: { 'Content-Type': 'application/json' } });
 
 api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem(TOKEN_KEY);
@@ -23,9 +16,7 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
-    if (error.response?.status === 401) {
-      await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
-    }
+    if (error.response?.status === 401) await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
     return Promise.reject(error);
   }
 );
@@ -37,8 +28,9 @@ export const riderSignup = (formData) =>
     transformRequest: (data) => data,
   });
 
-export const riderVerifyPhoneOTP  = (data) => api.post('/auth/rider-verify-phone-otp', data);
-export const riderResendOTP       = (data) => api.post('/auth/rider-resend-otp', data);
+export const riderVerifyPhoneOTP  = (data) => api.post('/auth/rider-verify-phone-otp', data);  // { phone, firebaseIdToken }
+export const riderVerifyEmailOTP  = (data) => api.post('/auth/rider-verify-email-otp', data);  // { phone, email, otp }
+export const riderResendEmailOTP  = (data) => api.post('/auth/rider-resend-email-otp', data);  // { email, name? }
 export const riderLogin           = (data) => api.post('/auth/rider-login', data);
 export const riderForgotPassword  = (data) => api.post('/auth/rider-forgot-password', data);
 export const riderResendForgotOTP = (data) => api.post('/auth/rider-resend-forgot-otp', data);
@@ -62,7 +54,7 @@ export const toggleOnline       = ()         => api.post('/riders/toggle-online'
 export const getDashboard       = ()         => api.get('/riders/dashboard');
 export const updateLocation     = (data)     => api.post('/riders/update-location', data);
 export const getEarnings        = (period)   => api.get('/riders/earnings', { params: { period } });
-export const getRiderOrders     = ()         => api.get('/riders/orders');
+export const getRiderOrders     = ()         => api.get('/riders/orders', { headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } });
 export const getRiderProfile    = ()         => api.get('/riders/profile');
 export const updateRiderProfile = (data)     => api.put('/riders/profile', data);
 export const uploadProfilePhoto = (formData) =>
@@ -90,16 +82,14 @@ export const uploadDropPhoto = (id, formData) =>
     transformRequest: (data) => data,
   });
 
-export const saveFcmToken        = (data)     => api.post('/auth/fcm-token', data);
+export const saveFcmToken           = (data) => api.post('/auth/fcm-token', data);
+export const riderChangePassword    = (data) => api.post('/auth/rider-change-password', data);
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────
-export const getNotifications     = ()        => api.get('/notifications');
-export const markNotificationRead = (id)      => api.patch(`/notifications/${id}/read`);
+export const getNotifications     = ()   => api.get('/notifications');
+export const markNotificationRead = (id) => api.patch(`/notifications/${id}/read`);
 
 // ── SUPPORT ───────────────────────────────────────────────────────
-export const submitInquiry        = (data)    => api.post('/inquiry', data);
+export const submitInquiry = (data) => api.post('/inquiry', data);
 
 export default api;
-
-// Rider-specific password change (backend uses req.user set by protect middleware)
-export const riderChangePassword = (data) => api.post('/auth/rider-change-password', data);

@@ -23,7 +23,7 @@ export default function SelfieCaptureScreen({ navigation, route }) {
       <View style={styles.permWrap}>
         <View style={styles.permIcon}><Ionicons name="camera-outline" size={56} color={COLORS.primary} /></View>
         <Text style={styles.permTitle}>Camera access needed</Text>
-        <Text style={styles.permText}>We need a live selfie to verify your identity. Gallery photos are not allowed.</Text>
+        <Text style={styles.permText}>We need a live selfie to verify your identity.</Text>
         <Button title="Allow Camera" onPress={requestPermission} size="lg" style={{ marginTop: SIZES.xl, alignSelf: 'stretch' }} />
       </View>
     );
@@ -50,10 +50,18 @@ export default function SelfieCaptureScreen({ navigation, route }) {
       fd.append('email',    signupData.email);
       fd.append('password', signupData.password);
       fd.append('selfie',   assetToFile(photo, 'selfie'));
-      const res = await riderSignup(fd);
-      const riderId = res.data?.data?.riderId;
-      Toast.show({ type: 'success', text1: 'Account created!', text2: 'Check your phone for a code' });
-      navigation.navigate('VerifyPhone', { riderId, phone: signupData.phone });
+
+      // Backend stores temporarily + sends email OTP — does NOT create rider yet
+      await riderSignup(fd);
+
+      Toast.show({ type: 'success', text1: 'Verification required!', text2: 'Check email or verify via phone' });
+
+      // No riderId returned — pass phone + email only
+      navigation.navigate('VerifyPhone', {
+        phone: signupData.phone,
+        email: signupData.email,
+        name:  signupData.name,
+      });
     } catch (e) {
       Toast.show({ type: 'error', text1: errMsg(e, 'Signup failed') });
     } finally { setSubmitting(false); }
@@ -63,7 +71,7 @@ export default function SelfieCaptureScreen({ navigation, route }) {
     return (
       <View style={styles.previewWrap}>
         <View style={styles.previewHeader}>
-          <TouchableOpacity onPress={() => setPhoto(null)} style={styles.iconBtn} hitSlop={{ top:10,bottom:10,left:10,right:10 }}>
+          <TouchableOpacity onPress={() => setPhoto(null)} style={styles.iconBtn}>
             <Ionicons name="arrow-back" size={22} color={COLORS.white} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Looks good?</Text>
@@ -84,20 +92,17 @@ export default function SelfieCaptureScreen({ navigation, route }) {
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="front" />
-
       <View style={styles.topBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn} hitSlop={{ top:10,bottom:10,left:10,right:10 }}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
           <Ionicons name="arrow-back" size={22} color={COLORS.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Take a Selfie</Text>
         <View style={styles.iconBtn} />
       </View>
-
       <View pointerEvents="none" style={styles.frameWrap}>
         <View style={styles.frame} />
         <Text style={styles.frameHint}>Position your face inside the oval</Text>
       </View>
-
       <View style={styles.bottomBar}>
         <View style={{ width: 60 }} />
         <TouchableOpacity style={styles.shutter} onPress={takePhoto} disabled={busy}>

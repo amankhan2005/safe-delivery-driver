@@ -1,107 +1,191 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  RefreshControl, ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getEarnings } from '../../api';
 import { fmtCurrency, fmtDate, fmtStatus, statusColor } from '../../utils/helpers';
 import { COLORS, SIZES, SHADOWS } from '../../theme';
 
+const BRAND = COLORS.primary;
+
 const PERIODS = [
-  { key: 'daily',   label: 'Today' },
-  { key: 'monthly', label: 'This Month' },
-  { key: 'yearly',  label: 'This Year' },
+  { key: 'daily',   label: 'Today',      icon: 'today-outline' },
+  { key: 'monthly', label: 'This Month', icon: 'calendar-outline' },
+  { key: 'yearly',  label: 'This Year',  icon: 'stats-chart-outline' },
 ];
 
 export default function EarningsScreen() {
-  const [period,    setPeriod]    = useState('daily');
-  const [data,      setData]      = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [refreshing,setRefreshing]= useState(false);
+  const [period,     setPeriod]     = useState('daily');
+  const [data,       setData]       = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await getEarnings(period);
       setData(res?.data?.data || null);
-    } catch { /* silent */ }
+    } catch {}
     finally { setLoading(false); setRefreshing(false); }
   }, [period]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
-  const earnings    = data?.periodEarnings   ?? 0;
-  const miles       = data?.periodMiles      ?? 0;
+  const earnings    = data?.periodEarnings ?? 0;
+  const miles       = data?.periodMiles    ?? 0;
   const allTimeObj  = data?.allTimeEarnings;
   const allTime     = typeof allTimeObj === 'object' ? (allTimeObj?.total ?? 0) : (allTimeObj ?? 0);
-  const ordersCount = data?.ordersCount      ?? 0;
-  const orders      = data?.orders           || [];
+  const ordersCount = data?.ordersCount    ?? 0;
+  const orders      = data?.orders         || [];
+  const avgFare     = ordersCount > 0 ? earnings / ordersCount : 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={s.root} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={COLORS.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={BRAND} />}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Earnings</Text>
+
+        {/* ── Header ── */}
+        <View style={s.header}>
+          <Text style={s.headerTitle}>Earnings</Text>
+          <Text style={s.headerSub}>Track your delivery income</Text>
         </View>
 
-        {/* Period selector */}
-        <View style={styles.periodRow}>
-          {PERIODS.map((p) => (
+        {/* ── Period tabs ── */}
+        <View style={s.tabs}>
+          {PERIODS.map(p => (
             <TouchableOpacity
               key={p.key}
+              style={[s.tab, period === p.key && s.tabActive]}
               onPress={() => setPeriod(p.key)}
-              style={[styles.periodBtn, period === p.key && styles.periodBtnActive]}
-              activeOpacity={0.85}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.periodLabel, period === p.key && styles.periodLabelActive]}>{p.label}</Text>
+              <Ionicons
+                name={p.icon}
+                size={14}
+                color={period === p.key ? '#fff' : COLORS.gray500}
+              />
+              <Text style={[s.tabTxt, period === p.key && s.tabTxtActive]}>{p.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {loading ? (
-          <View style={styles.loadingBox}><ActivityIndicator color={COLORS.primary} /></View>
+          <View style={s.loader}><ActivityIndicator color={BRAND} size="large" /></View>
         ) : (
           <>
-            {/* Big number */}
-            <View style={styles.bigCard}>
-              <Text style={styles.bigLabel}>{PERIODS.find((p) => p.key === period)?.label}</Text>
-              <Text style={styles.bigValue}>{fmtCurrency(earnings)}</Text>
-              <View style={styles.bigMeta}>
-                <View style={styles.metaItem}><Ionicons name="cube-outline" size={16} color={COLORS.gray500} /><Text style={styles.metaText}>{ordersCount} orders</Text></View>
-                <View style={styles.metaDivider} />
-                <View style={styles.metaItem}><Ionicons name="map-outline" size={16} color={COLORS.gray500} /><Text style={styles.metaText}>{Number(miles).toFixed(1)} miles</Text></View>
+            {/* ── Main earnings card ── */}
+            <LinearGradient
+              colors={['#0A2F9A', '#1B4FD8', '#2563EB']}
+              style={s.mainCard}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={s.mainLabel}>
+                {PERIODS.find(p => p.key === period)?.label} Earnings
+              </Text>
+              <Text style={s.mainVal}>{fmtCurrency(earnings)}</Text>
+
+              <View style={s.mainStats}>
+                <View style={s.mainStat}>
+                  <Ionicons name="cube-outline" size={16} color="rgba(255,255,255,0.7)" />
+                  <Text style={s.mainStatVal}>{ordersCount}</Text>
+                  <Text style={s.mainStatLabel}>Orders</Text>
+                </View>
+                <View style={s.mainStatDiv} />
+                <View style={s.mainStat}>
+                  <Ionicons name="navigate-outline" size={16} color="rgba(255,255,255,0.7)" />
+                  <Text style={s.mainStatVal}>{Number(miles).toFixed(1)}</Text>
+                  <Text style={s.mainStatLabel}>Miles</Text>
+                </View>
+                <View style={s.mainStatDiv} />
+                <View style={s.mainStat}>
+                  <Ionicons name="cash-outline" size={16} color="rgba(255,255,255,0.7)" />
+                  <Text style={s.mainStatVal}>{fmtCurrency(avgFare)}</Text>
+                  <Text style={s.mainStatLabel}>Avg/Order</Text>
+                </View>
+              </View>
+            </LinearGradient>
+
+            {/* ── All-time card ── */}
+            <View style={s.allTimeCard}>
+              <View style={s.allTimeIconWrap}>
+                <Ionicons name="trophy-outline" size={22} color={BRAND} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.allTimeLabel}>All-Time Earnings</Text>
+                <Text style={s.allTimeVal}>{fmtCurrency(allTime)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.gray400} />
+            </View>
+
+            {/* ── Quick stats row ── */}
+            <View style={s.quickRow}>
+              <View style={[s.quickTile, { borderLeftColor: '#16A34A' }]}>
+                <Ionicons name="checkmark-circle-outline" size={20} color="#16A34A" />
+                <Text style={[s.quickVal, { color: '#16A34A' }]}>{ordersCount}</Text>
+                <Text style={s.quickLabel}>Completed</Text>
+              </View>
+              <View style={[s.quickTile, { borderLeftColor: BRAND }]}>
+                <Ionicons name="map-outline" size={20} color={BRAND} />
+                <Text style={[s.quickVal, { color: BRAND }]}>{Number(miles).toFixed(1)}</Text>
+                <Text style={s.quickLabel}>Miles Driven</Text>
+              </View>
+              <View style={[s.quickTile, { borderLeftColor: '#D97706' }]}>
+                <Ionicons name="star-outline" size={20} color="#D97706" />
+                <Text style={[s.quickVal, { color: '#D97706' }]}>
+                  {ordersCount > 0 ? '98%' : '—'}
+                </Text>
+                <Text style={s.quickLabel}>Success Rate</Text>
               </View>
             </View>
 
-            {/* All-time */}
-            <View style={styles.alltimeCard}>
-              <View>
-                <Text style={styles.alltimeLabel}>All-Time Earnings</Text>
-                <Text style={styles.alltimeValue}>{fmtCurrency(allTime)}</Text>
-              </View>
-              <Ionicons name="trophy-outline" size={32} color={COLORS.primary} />
-            </View>
-
-            {/* Order list */}
+            {/* ── Order list ── */}
             {orders.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Orders</Text>
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Recent Orders</Text>
                 {orders.map((o) => {
                   const color = statusColor(o.status);
                   return (
-                    <View key={o._id} style={styles.orderRow}>
-                      <View style={styles.orderLeft}>
-                        <View style={[styles.orderDot, { backgroundColor: color }]} />
-                        <View>
-                          <Text style={styles.orderAddr} numberOfLines={1}>{o.drop?.address}</Text>
-                          <Text style={styles.orderDate}>{fmtDate(o.createdAt)}</Text>
+                    <View key={o._id} style={s.orderCard}>
+                      <View style={[s.orderStatusBar, { backgroundColor: color }]} />
+                      <View style={s.orderBody}>
+                        <View style={s.orderTop}>
+                          <View style={s.orderRouteWrap}>
+                            <View style={s.orderRouteRow}>
+                              <View style={[s.orderDot, { backgroundColor: '#22C55E' }]} />
+                              <Text style={s.orderAddr} numberOfLines={1}>{o.pickup?.address || 'Pickup'}</Text>
+                            </View>
+                            <View style={s.orderConn}><View style={s.orderConnLine} /></View>
+                            <View style={s.orderRouteRow}>
+                              <View style={[s.orderDot, { backgroundColor: '#EF4444' }]} />
+                              <Text style={s.orderAddr} numberOfLines={1}>{o.drop?.address || 'Drop'}</Text>
+                            </View>
+                          </View>
+                          <View style={s.orderRight}>
+                            <Text style={s.orderFare}>{fmtCurrency(o.fare)}</Text>
+                            <View style={[s.orderStatusBadge, { backgroundColor: color + '18' }]}>
+                              <Text style={[s.orderStatusTxt, { color }]}>{fmtStatus(o.status)}</Text>
+                            </View>
+                          </View>
                         </View>
+                        <Text style={s.orderDate}>{fmtDate(o.createdAt)}</Text>
                       </View>
-                      <Text style={styles.orderFare}>{fmtCurrency(o.fare)}</Text>
                     </View>
                   );
                 })}
+              </View>
+            )}
+
+            {orders.length === 0 && (
+              <View style={s.emptyOrders}>
+                <Ionicons name="receipt-outline" size={40} color={COLORS.gray300} />
+                <Text style={s.emptyTitle}>No orders yet</Text>
+                <Text style={s.emptySub}>Your completed orders will appear here</Text>
               </View>
             )}
           </>
@@ -113,32 +197,67 @@ export default function EarningsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container:       { flex: 1, backgroundColor: COLORS.background },
-  header:          { padding: SIZES.lg },
-  title:           { fontSize: SIZES.fontXxl, fontWeight: '700', color: COLORS.gray900 },
-  loadingBox:      { padding: 60, alignItems: 'center' },
-  periodRow:       { flexDirection: 'row', paddingHorizontal: SIZES.lg, marginBottom: SIZES.lg, gap: 8 },
-  periodBtn:       { flex: 1, paddingVertical: 10, borderRadius: SIZES.radiusMd, backgroundColor: COLORS.white, alignItems: 'center', borderWidth: 1.5, borderColor: COLORS.border },
-  periodBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  periodLabel:     { fontSize: SIZES.fontSm, fontWeight: '600', color: COLORS.gray500 },
-  periodLabelActive:{ color: COLORS.white },
-  bigCard:         { backgroundColor: COLORS.primary, marginHorizontal: SIZES.lg, borderRadius: SIZES.radiusXl, padding: SIZES.xl, ...SHADOWS.md },
-  bigLabel:        { fontSize: SIZES.fontSm, color: 'rgba(255,255,255,0.8)', fontWeight: '600', letterSpacing: 1 },
-  bigValue:        { fontSize: 44, fontWeight: '800', color: COLORS.white, marginTop: 4 },
-  bigMeta:         { flexDirection: 'row', alignItems: 'center', marginTop: SIZES.lg },
-  metaItem:        { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  metaText:        { color: 'rgba(255,255,255,0.85)', fontSize: SIZES.fontSm, fontWeight: '500' },
-  metaDivider:     { width: 1, height: 14, backgroundColor: 'rgba(255,255,255,0.4)', marginHorizontal: SIZES.md },
-  alltimeCard:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.primaryLight, marginHorizontal: SIZES.lg, marginTop: SIZES.md, borderRadius: SIZES.radiusLg, padding: SIZES.lg, ...SHADOWS.sm },
-  alltimeLabel:    { fontSize: SIZES.fontSm, color: COLORS.primary, fontWeight: '600' },
-  alltimeValue:    { fontSize: SIZES.fontXxl, fontWeight: '700', color: COLORS.primaryDark, marginTop: 4 },
-  section:         { paddingHorizontal: SIZES.lg, marginTop: SIZES.xl },
-  sectionTitle:    { fontSize: SIZES.fontLg, fontWeight: '700', color: COLORS.gray900, marginBottom: SIZES.md },
-  orderRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: SIZES.radiusMd, padding: SIZES.md, marginBottom: SIZES.sm, ...SHADOWS.sm },
-  orderLeft:       { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  orderDot:        { width: 10, height: 10, borderRadius: 5, marginRight: SIZES.md },
-  orderAddr:       { fontSize: SIZES.fontMd, fontWeight: '500', color: COLORS.gray900, maxWidth: 200 },
-  orderDate:       { fontSize: SIZES.fontXs, color: COLORS.gray500, marginTop: 2 },
-  orderFare:       { fontSize: SIZES.fontMd, fontWeight: '700', color: COLORS.primary },
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#F1F5FB' },
+
+  header:      { paddingHorizontal: SIZES.lg, paddingTop: SIZES.lg, paddingBottom: SIZES.sm },
+  headerTitle: { fontSize: 26, fontWeight: '900', color: '#111827', letterSpacing: -0.5 },
+  headerSub:   { fontSize: 13, color: '#6B7280', fontWeight: '500', marginTop: 3 },
+
+  // Tabs
+  tabs:       { flexDirection: 'row', marginHorizontal: SIZES.lg, marginBottom: SIZES.lg, backgroundColor: '#E5E7EB', borderRadius: 12, padding: 3, gap: 3 },
+  tab:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 10 },
+  tabActive:  { backgroundColor: BRAND, ...SHADOWS.sm },
+  tabTxt:     { fontSize: 12, fontWeight: '700', color: COLORS.gray500 },
+  tabTxtActive:{ color: '#fff' },
+
+  loader: { padding: 80, alignItems: 'center' },
+
+  // Main card
+  mainCard:      { marginHorizontal: SIZES.lg, borderRadius: 20, padding: SIZES.xl, ...SHADOWS.blue },
+  mainLabel:     { fontSize: 11, fontWeight: '700', color: 'rgba(255,255,255,0.65)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 },
+  mainVal:       { fontSize: 48, fontWeight: '900', color: '#fff', letterSpacing: -1, marginBottom: SIZES.lg },
+  mainStats:     { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: SIZES.md },
+  mainStat:      { flex: 1, alignItems: 'center', gap: 3 },
+  mainStatVal:   { fontSize: 16, fontWeight: '900', color: '#fff' },
+  mainStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontWeight: '500' },
+  mainStatDiv:   { width: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
+
+  // All time
+  allTimeCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: SIZES.lg, marginTop: SIZES.md, borderRadius: 16, padding: SIZES.lg, gap: SIZES.md, ...SHADOWS.sm },
+  allTimeIconWrap:{ width: 46, height: 46, borderRadius: 14, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
+  allTimeLabel:   { fontSize: 12, color: '#6B7280', fontWeight: '600', marginBottom: 3 },
+  allTimeVal:     { fontSize: 22, fontWeight: '900', color: BRAND },
+
+  // Quick stats
+  quickRow:  { flexDirection: 'row', marginHorizontal: SIZES.lg, marginTop: SIZES.md, gap: SIZES.sm },
+  quickTile: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 12, gap: 4, borderLeftWidth: 3, ...SHADOWS.sm },
+  quickVal:  { fontSize: 16, fontWeight: '900' },
+  quickLabel:{ fontSize: 10, color: '#6B7280', fontWeight: '500' },
+
+  // Section
+  section:      { marginHorizontal: SIZES.lg, marginTop: SIZES.xl },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: SIZES.md, letterSpacing: -0.2 },
+
+  // Order card
+  orderCard:       { backgroundColor: '#fff', borderRadius: 14, marginBottom: SIZES.sm, flexDirection: 'row', overflow: 'hidden', ...SHADOWS.sm },
+  orderStatusBar:  { width: 4 },
+  orderBody:       { flex: 1, padding: SIZES.md },
+  orderTop:        { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.sm },
+  orderRouteWrap:  { flex: 1 },
+  orderRouteRow:   { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  orderDot:        { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  orderAddr:       { fontSize: 13, fontWeight: '600', color: '#111827', flex: 1 },
+  orderConn:       { paddingLeft: 4, paddingVertical: 2 },
+  orderConnLine:   { width: 2, height: 10, backgroundColor: '#E5E7EB', borderRadius: 1 },
+  orderRight:      { alignItems: 'flex-end', gap: 5 },
+  orderFare:       { fontSize: 16, fontWeight: '900', color: BRAND },
+  orderStatusBadge:{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  orderStatusTxt:  { fontSize: 10, fontWeight: '700' },
+  orderDate:       { fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 6 },
+
+  // Empty
+  emptyOrders: { alignItems: 'center', padding: 40, gap: 8 },
+  emptyTitle:  { fontSize: 16, fontWeight: '700', color: '#374151' },
+  emptySub:    { fontSize: 13, color: '#9CA3AF', textAlign: 'center' },
 });
