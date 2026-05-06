@@ -9,20 +9,35 @@ const useAuthStore = create((set) => ({
   rider:   null,
   loading: true,
 
+  // KEY FIX: add 10s timeout so splash never gets stuck forever
   init: async () => {
+    const timeout = setTimeout(() => {
+      // Force loading=false after 10s even if API hangs
+      set((s) => s.loading ? { loading: false } : s);
+    }, 10000);
+
     try {
       const token = await AsyncStorage.getItem(TOKEN_KEY);
       if (token) {
         set({ token });
-        const res = await getMe();
-        const data = res.data.data;
-        // Backend getMe returns { user: req.user } — works for both User and Rider models
-        const rider = data.user || data.rider || null;
-        set({ rider, loading: false });
+        try {
+          const res  = await getMe();
+          const data = res.data.data;
+          const rider = data.user || data.rider || null;
+          clearTimeout(timeout);
+          set({ rider, loading: false });
+        } catch {
+          // /me failed — clear token, go to auth
+          await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
+          clearTimeout(timeout);
+          set({ token: null, rider: null, loading: false });
+        }
       } else {
+        clearTimeout(timeout);
         set({ loading: false });
       }
     } catch {
+      clearTimeout(timeout);
       await AsyncStorage.removeItem(TOKEN_KEY).catch(() => {});
       set({ token: null, rider: null, loading: false });
     }
@@ -40,8 +55,8 @@ const useAuthStore = create((set) => ({
 
   refreshRider: async () => {
     try {
-      const res = await getMe();
-      const data = res.data.data;
+      const res   = await getMe();
+      const data  = res.data.data;
       const rider = data.user || data.rider || null;
       if (rider) set({ rider });
       return rider;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Image, Modal, FlatList,
@@ -22,6 +22,9 @@ import { COLORS, SIZES, SHADOWS } from '../../theme';
 const { width: SW } = Dimensions.get('window');
 const BRAND      = COLORS.primary;
 const BRAND_DARK = COLORS.primaryDark;
+
+// 24 hours in milliseconds
+const EARNINGS_REFRESH_INTERVAL = 24 * 60 * 60 * 1000;
 
 // ─── Notifications Sheet ──────────────────────────────────────────────────────
 function NotifSheet({ visible, onClose, notifications, loading, onMarkRead }) {
@@ -140,6 +143,9 @@ export default function HomeScreen({ navigation }) {
   const [notifs,       setNotifs]       = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
 
+  // ✅ Ref to hold the 24-hour auto-refresh interval
+  const earningsTimerRef = useRef(null);
+
   const isOnline    = !!rider?.isOnline;
   const unread      = notifs.filter(n => !n.read).length;
   const firstName   = rider?.name?.split(' ')[0] || 'Rider';
@@ -173,7 +179,22 @@ export default function HomeScreen({ navigation }) {
     } catch {} finally { setNotifLoading(false); }
   }, []);
 
-  useEffect(() => { load(); loadNotifs(); }, []);
+  // ✅ Start 24-hour auto-refresh timer for today's earnings (dashboard reload)
+  useEffect(() => {
+    load();
+    loadNotifs();
+
+    // Har 24 ghante mein dashboard reload hoga — today's earnings auto-reset ho jayegi
+    earningsTimerRef.current = setInterval(() => {
+      load();
+    }, EARNINGS_REFRESH_INTERVAL);
+
+    // Cleanup on unmount
+    return () => {
+      if (earningsTimerRef.current) clearInterval(earningsTimerRef.current);
+    };
+  }, []);
+
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const handleToggle = async () => {

@@ -6,7 +6,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getEarnings } from '../../api';
+
+// ✅ FIXED: getEarnings → getRiderEarnings (correct export name from api.js)
+import { getRiderEarnings } from '../../api';
 import { fmtCurrency, fmtDate, fmtStatus, statusColor } from '../../utils/helpers';
 import { COLORS, SIZES, SHADOWS } from '../../theme';
 
@@ -26,10 +28,15 @@ export default function EarningsScreen() {
 
   const load = useCallback(async () => {
     try {
-      const res = await getEarnings(period);
+      // ✅ FIXED: getRiderEarnings(period) — period query param backend ko bheja ja raha hai
+      const res = await getRiderEarnings(period);
       setData(res?.data?.data || null);
-    } catch {}
-    finally { setLoading(false); setRefreshing(false); }
+    } catch (e) {
+      console.log('Earnings fetch error:', e?.response?.data || e.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [period]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
@@ -205,10 +212,10 @@ const s = StyleSheet.create({
   headerSub:   { fontSize: 13, color: '#6B7280', fontWeight: '500', marginTop: 3 },
 
   // Tabs
-  tabs:       { flexDirection: 'row', marginHorizontal: SIZES.lg, marginBottom: SIZES.lg, backgroundColor: '#E5E7EB', borderRadius: 12, padding: 3, gap: 3 },
-  tab:        { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 10 },
-  tabActive:  { backgroundColor: BRAND, ...SHADOWS.sm },
-  tabTxt:     { fontSize: 12, fontWeight: '700', color: COLORS.gray500 },
+  tabs:        { flexDirection: 'row', marginHorizontal: SIZES.lg, marginBottom: SIZES.lg, backgroundColor: '#E5E7EB', borderRadius: 12, padding: 3, gap: 3 },
+  tab:         { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 10 },
+  tabActive:   { backgroundColor: BRAND, ...SHADOWS.sm },
+  tabTxt:      { fontSize: 12, fontWeight: '700', color: COLORS.gray500 },
   tabTxtActive:{ color: '#fff' },
 
   loader: { padding: 80, alignItems: 'center' },

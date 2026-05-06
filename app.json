@@ -2,7 +2,7 @@
   "expo": {
     "name": "Safe Delivery Rider",
     "slug": "safe-delivery-rider",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,9 +11,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#0B1F4B"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.safedelivery.rider",
@@ -42,26 +40,13 @@
       "googleServicesFile": "./google-services.json"
     },
     "plugins": [
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Allow Safe Delivery to access camera for selfie and delivery photos."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Allow Safe Delivery to use location to share with customers during deliveries."
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow Safe Delivery to access photos for KYC documents."
-        }
-      ],
+      ["expo-camera", { "cameraPermission": "Allow Safe Delivery to access camera for selfie and delivery photos." }],
+      ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow Safe Delivery to use location to share with customers during deliveries." }],
+      ["expo-image-picker", { "photosPermission": "Allow Safe Delivery to access photos for KYC documents." }],
       "expo-asset",
       "expo-font",
+      "expo-splash-screen",
+      "expo-audio",
       [
         "expo-notifications",
         {
@@ -73,8 +58,17 @@
           "iosDisplayInForeground": true
         }
       ],
-      "expo-audio",
-      "expo-splash-screen"
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "kotlinVersion": "2.1.21"
+          }
+        }
+      ]
     ],
     "sdkVersion": "54.0.0"
   }

@@ -9,10 +9,38 @@ import useAuthStore from './src/store/authStore';
 import NewOrderPopup from './src/components/NewOrderPopup';
 import { acceptOrder, rejectOrder, getRiderOrders } from './src/api';
 import useOrderStore from './src/store/orderStore';
+import { pingBackend } from './src/api';
 
 // Keep splash visible until app is ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// Wake up backend on startup
+pingBackend();
+
+// ── Error Boundary ────────────────────────────────────────────────────────────
+import { View, Text, StyleSheet } from 'react-native';
+
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(e, i) { console.error('[ErrorBoundary]', e, i); }
+  render() {
+    if (this.state.hasError) return (
+      <View style={EB.c}>
+        <Text style={EB.t}>Something went wrong</Text>
+        <Text style={EB.s}>Please restart the app</Text>
+      </View>
+    );
+    return this.props.children;
+  }
+}
+const EB = StyleSheet.create({
+  c: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', padding: 32 },
+  t: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  s: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
+});
+
+// ── Rider Notification Manager ────────────────────────────────────────────────
 function RiderNotificationManager() {
   const rider              = useAuthStore((s) => s.rider);
   const setActiveOrder     = useOrderStore((s) => s.setActiveOrder);
@@ -25,9 +53,7 @@ function RiderNotificationManager() {
   const shownIds = useRef(new Set());
   const popupRef = useRef(false);
 
-  useEffect(() => {
-    popupRef.current = popupVisible;
-  }, [popupVisible]);
+  useEffect(() => { popupRef.current = popupVisible; }, [popupVisible]);
 
   useEffect(() => {
     if (!rider?._id) {
@@ -56,7 +82,6 @@ function RiderNotificationManager() {
 
     poll();
     pollRef.current = setInterval(poll, 15000);
-
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
@@ -80,9 +105,7 @@ function RiderNotificationManager() {
     setPopupVisible(false);
     popupRef.current = false;
     setTimeout(() => { shownIds.current.delete(order?._id); }, 30000);
-    try {
-      if (order?._id) await rejectOrder(order._id);
-    } catch (_) {}
+    try { if (order?._id) await rejectOrder(order._id); } catch (_) {}
   };
 
   return (
@@ -95,19 +118,24 @@ function RiderNotificationManager() {
   );
 }
 
+// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const onReady = useCallback(async () => {
-    try { await SplashScreen.hideAsync(); } catch {}
+    try {
+      await SplashScreen.hideAsync();
+    } catch {}
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <StatusBar style="auto" />
-        <AppNavigator onReady={onReady} />
-        <RiderNotificationManager />
-        <Toast position="top" topOffset={60} visibilityTime={3500} />
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <StatusBar style="auto" />
+          <AppNavigator onReady={onReady} />
+          <RiderNotificationManager />
+          <Toast position="top" topOffset={60} visibilityTime={3500} />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

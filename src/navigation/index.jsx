@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ActivityIndicator, View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 
@@ -39,12 +40,16 @@ const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
 const NO_HEADER = { headerShown: false };
 
-// ─── Custom Tab Bar matching the design ───────────────────────────────────────
+// ── Custom Tab Bar with safe area insets ─────────────────────────────────────
 function CustomTabBar({ state, navigation }) {
   const rider      = useAuthStore((s) => s.rider);
   const patchRider = useAuthStore((s) => s.patchRider);
   const isOnline   = !!rider?.isOnline;
   const [toggling, setToggling] = React.useState(false);
+
+  // KEY FIX: responsive bottom padding using safe area insets
+  const insets    = useSafeAreaInsets();
+  const bottomPad = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'android' ? 10 : 20);
 
   const handleGoOnline = async () => {
     if (toggling) return;
@@ -66,13 +71,13 @@ function CustomTabBar({ state, navigation }) {
   const tabs = [
     { name: 'Home',     icon: 'home',          iconOut: 'home-outline' },
     { name: 'Orders',   icon: 'document-text', iconOut: 'document-text-outline' },
-    { name: 'GoOnline', icon: 'bicycle',       iconOut: 'bicycle',   isCenter: true },
+    { name: 'GoOnline', icon: 'bicycle',       iconOut: 'bicycle', isCenter: true },
     { name: 'Earnings', icon: 'wallet',        iconOut: 'wallet-outline' },
     { name: 'Profile',  icon: 'person',        iconOut: 'person-outline' },
   ];
 
   return (
-    <View style={tab.bar}>
+    <View style={[tab.bar, { paddingBottom: bottomPad }]}>
       {tabs.map((t) => {
         if (t.isCenter) {
           return (
@@ -125,16 +130,15 @@ const tab = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 0.5,
     borderTopColor: COLORS.border,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingHorizontal: 8,
     alignItems: 'flex-end',
     ...SHADOWS.sm,
   },
-  item:             { flex: 1, alignItems: 'center', gap: 3 },
-  label:            { fontSize: 10, fontWeight: '600', color: COLORS.gray400 },
-  labelActive:      { color: COLORS.primary },
-  centerWrap:       { flex: 1, alignItems: 'center', marginTop: -28 },
+  item:              { flex: 1, alignItems: 'center', gap: 3, paddingBottom: 2 },
+  label:             { fontSize: 10, fontWeight: '600', color: COLORS.gray400 },
+  labelActive:       { color: COLORS.primary },
+  centerWrap:        { flex: 1, alignItems: 'center', marginTop: -28 },
   centerBtn: {
     width: 56, height: 56, borderRadius: 28,
     backgroundColor: COLORS.primary,
@@ -142,18 +146,15 @@ const tab = StyleSheet.create({
     borderWidth: 3, borderColor: '#fff',
     ...SHADOWS.md,
   },
-  centerBtnOnline:  { backgroundColor: COLORS.green },
-  centerLabel:      { fontSize: 10, fontWeight: '600', color: COLORS.gray400, marginTop: 3 },
-  centerLabelOnline:{ color: COLORS.green },
+  centerBtnOnline:   { backgroundColor: COLORS.green },
+  centerLabel:       { fontSize: 10, fontWeight: '600', color: COLORS.gray400, marginTop: 3 },
+  centerLabelOnline: { color: COLORS.green },
 });
 
-// ─── Navigators ───────────────────────────────────────────────────────────────
+// ── Navigators ────────────────────────────────────────────────────────────────
 function Tabs() {
   return (
-    <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
+    <Tab.Navigator tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tab.Screen name="Home"     component={HomeScreen} />
       <Tab.Screen name="Orders"   component={OrdersScreen} />
       <Tab.Screen name="GoOnline" component={HomeScreen} />
@@ -203,7 +204,7 @@ function MainStack() {
 function pickRoute(rider) {
   if (!rider) return { screen: 'Auth' };
   if (!rider.kycCompleted) {
-    const step = rider.kycStep ?? 1;
+    const step    = rider.kycStep ?? 1;
     const initial = step === 2 ? 'KYCStep2' : step === 3 ? 'KYCStep3' : 'KYCStep1';
     return { screen: 'KYC', initial };
   }
@@ -211,7 +212,7 @@ function pickRoute(rider) {
   return { screen: 'Main' };
 }
 
-export default function AppNavigator() {
+export default function AppNavigator({ onReady }) {
   const { token, rider, loading, init } = useAuthStore();
   useEffect(() => { init(); }, []);
 
@@ -228,7 +229,7 @@ export default function AppNavigator() {
     : { screen: 'Auth' };
 
   return (
-    <NavigationContainer>
+    <NavigationContainer onReady={onReady}>
       <Stack.Navigator screenOptions={NO_HEADER}>
         {route.screen === 'Auth' && <Stack.Screen name="Auth" component={AuthStack} />}
         {route.screen === 'KYC' && (
