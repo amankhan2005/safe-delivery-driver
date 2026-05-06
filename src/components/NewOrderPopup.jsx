@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { useAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { COLORS, SIZES, SHADOWS } from '../theme';
 
 const FW = {
@@ -27,20 +27,23 @@ export default function NewOrderPopup({ order, visible, onAccept, onReject }) {
   const iconScale = useRef(new Animated.Value(0.8)).current;
   const fareScale = useRef(new Animated.Value(0.5)).current;
 
-  // expo-audio: useAudioPlayer hook with the asset source
+  // expo-audio player — loaded once, reused
   const player = useAudioPlayer(require('../../assets/ring.wav'));
 
   const playSound = async () => {
     try {
+      // Set audio mode — this is critical for Android sound to play
       await setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: false,
-        interruptionModeAndroid: 1,
+        allowsRecordingIOS:          false,
+        playsInSilentModeIOS:        true,   // plays even on silent mode (iOS)
+        staysActiveInBackground:     true,
+        shouldDuckAndroid:           false,
+        playThroughEarpieceAndroid:  false,  // play through speaker not earpiece
       });
-      player.loop = true;
+
+      // Reset to beginning before playing
+      player.seekTo(0);
+      player.loop   = true;
       player.volume = 1.0;
       player.play();
     } catch (e) {
@@ -58,7 +61,10 @@ export default function NewOrderPopup({ order, visible, onAccept, onReject }) {
   };
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      stopSound();
+      return;
+    }
 
     setTimeLeft(COUNTDOWN);
     ringAnim.setValue(0);
@@ -67,6 +73,7 @@ export default function NewOrderPopup({ order, visible, onAccept, onReject }) {
     iconScale.setValue(0.8);
     fareScale.setValue(0.5);
 
+    // Slide in animation
     Animated.parallel([
       Animated.spring(slideY,    { toValue: 0, tension: 70, friction: 11, useNativeDriver: true }),
       Animated.timing(opacity,   { toValue: 1, duration: 300, useNativeDriver: true }),
@@ -74,15 +81,18 @@ export default function NewOrderPopup({ order, visible, onAccept, onReject }) {
       Animated.spring(fareScale, { toValue: 1, tension: 60, friction: 7, delay: 200, useNativeDriver: true }),
     ]).start();
 
+    // Play ringtone
     playSound();
 
+    // Progress bar animation
     Animated.timing(ringAnim, {
-      toValue: 1,
+      toValue:  1,
       duration: COUNTDOWN * 1000,
-      easing: Easing.linear,
+      easing:   Easing.linear,
       useNativeDriver: false,
     }).start();
 
+    // Countdown timer
     let t = COUNTDOWN;
     const interval = setInterval(() => {
       t -= 1;
@@ -143,7 +153,6 @@ export default function NewOrderPopup({ order, visible, onAccept, onReject }) {
               </Animated.View>
               <Text style={S.headerTitle}>New Request!</Text>
             </View>
-            {/* BIG FARE */}
             <Animated.View style={[S.fareBigWrap, { transform: [{ scale: fareScale }] }]}>
               <Text style={S.fareBigLabel}>EARNINGS</Text>
               <Text style={S.fareBigVal}>{fmt(order.fare)}</Text>
@@ -174,7 +183,7 @@ export default function NewOrderPopup({ order, visible, onAccept, onReject }) {
           </View>
         </View>
 
-        {/* ── Weight chip ── */}
+        {/* ── Chips ── */}
         <View style={S.chipRow}>
           <View style={S.chip}>
             <Ionicons name="cube-outline" size={13} color={COLORS.primary} />
@@ -223,7 +232,6 @@ const S = StyleSheet.create({
     overflow: 'hidden', ...SHADOWS.lg,
   },
 
-  // Header
   header:    { padding: SIZES.lg, gap: SIZES.md, flexDirection: 'row', alignItems: 'center' },
   timerWrap: { width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
   timerRing: { position: 'absolute', width: 56, height: 56, borderRadius: 28, borderWidth: 3, borderColor: 'rgba(255,255,255,0.25)' },
@@ -235,13 +243,11 @@ const S = StyleSheet.create({
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle:    { fontSize: SIZES.fontLg, fontWeight: FW.black, color: '#fff' },
 
-  // Big fare
   fareBigWrap:  { backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
   fareBigLabel: { fontSize: 9, fontWeight: FW.bold, color: 'rgba(255,255,255,0.7)', letterSpacing: 1.5 },
   fareBigVal:   { fontSize: 32, fontWeight: FW.black, color: '#fff', letterSpacing: -0.5 },
   fareBigMeta:  { fontSize: 11, fontWeight: FW.medium, color: 'rgba(255,255,255,0.75)', marginTop: 1 },
 
-  // Route
   routeBox:  { padding: SIZES.lg, backgroundColor: '#F8FAFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
   routeRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.sm },
   routeDot:  { width: 12, height: 12, borderRadius: 6, marginTop: 4, flexShrink: 0 },
@@ -251,12 +257,10 @@ const S = StyleSheet.create({
   routeConn: { flexDirection: 'column', gap: 3, marginLeft: 5, marginVertical: SIZES.sm },
   dash:      { width: 2, height: 5, backgroundColor: '#D1D5DB', borderRadius: 1 },
 
-  // Chips
   chipRow: { flexDirection: 'row', gap: SIZES.sm, paddingHorizontal: SIZES.lg, paddingVertical: SIZES.md, borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
   chip:    { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   chipText:{ fontSize: SIZES.fontXs, fontWeight: FW.semibold, color: COLORS.primary },
 
-  // Buttons
   actions:    { flexDirection: 'row', padding: SIZES.lg, gap: SIZES.md, paddingBottom: SIZES.xl },
   rejectBtn:  { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 2, borderColor: '#EF4444', borderRadius: SIZES.radiusMd, paddingVertical: 14, backgroundColor: '#FEF2F2' },
   rejectText: { fontSize: SIZES.fontMd, fontWeight: FW.black, color: '#EF4444' },

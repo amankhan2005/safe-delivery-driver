@@ -1,12 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
+import * as SplashScreen from 'expo-splash-screen';
 import AppNavigator from './src/navigation';
 import useAuthStore from './src/store/authStore';
 import NewOrderPopup from './src/components/NewOrderPopup';
 import { acceptOrder, rejectOrder, getRiderOrders } from './src/api';
 import useOrderStore from './src/store/orderStore';
+
+// Keep splash visible until app is ready
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 function RiderNotificationManager() {
   const rider              = useAuthStore((s) => s.rider);
@@ -25,7 +30,6 @@ function RiderNotificationManager() {
   }, [popupVisible]);
 
   useEffect(() => {
-    // Rider login nahi hai to poll mat karo
     if (!rider?._id) {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
@@ -37,10 +41,7 @@ function RiderNotificationManager() {
       try {
         const res = await getRiderOrders();
         const all = res?.data?.data?.orders || [];
-
-        // Sirf searching orders dikhao — isOnline backend se check hoga
         const searching = all.filter(o => o.status === 'searching');
-
         if (searching.length > 0) {
           const newOrder = searching[0];
           if (!shownIds.current.has(newOrder._id)) {
@@ -59,7 +60,7 @@ function RiderNotificationManager() {
     return () => {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
-  }, [rider?._id]); // ← isOnline nahi, _id use karo
+  }, [rider?._id]);
 
   const handleAccept = async (order) => {
     setPopupVisible(false);
@@ -95,12 +96,18 @@ function RiderNotificationManager() {
 }
 
 export default function App() {
+  const onReady = useCallback(async () => {
+    try { await SplashScreen.hideAsync(); } catch {}
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StatusBar style="auto" />
-      <AppNavigator />
-      <RiderNotificationManager />
-      <Toast position="top" topOffset={60} visibilityTime={3500} />
+      <SafeAreaProvider>
+        <StatusBar style="auto" />
+        <AppNavigator onReady={onReady} />
+        <RiderNotificationManager />
+        <Toast position="top" topOffset={60} visibilityTime={3500} />
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
