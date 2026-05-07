@@ -22,23 +22,28 @@
       }
     },
     "android": {
-      "package": "com.safedelivery.rider",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0B1F4B"
-      },
-      "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "INTERNET",
-        "ACCESS_NETWORK_STATE",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "POST_NOTIFICATIONS"
-      ],
-      "googleServicesFile": "./google-services.json"
-    },
+  "package": "com.safedelivery.rider",
+
+  "usesCleartextTraffic": true,
+
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/adaptive-icon.png",
+    "backgroundColor": "#0B1F4B"
+  },
+
+  "permissions": [
+    "CAMERA",
+    "ACCESS_FINE_LOCATION",
+    "ACCESS_COARSE_LOCATION",
+    "INTERNET",
+    "ACCESS_NETWORK_STATE",
+    "RECEIVE_BOOT_COMPLETED",
+    "VIBRATE",
+    "POST_NOTIFICATIONS"
+  ],
+
+  "googleServicesFile": "./google-services.json"
+},
     "plugins": [
       ["expo-camera", { "cameraPermission": "Allow Safe Delivery to access camera for selfie and delivery photos." }],
       ["expo-location", { "locationAlwaysAndWhenInUsePermission": "Allow Safe Delivery to use location to share with customers during deliveries." }],

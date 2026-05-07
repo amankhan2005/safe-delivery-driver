@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { getOrderById } from '../../api';
 import { fmtCurrency, fmtDateTime, fmtStatus, statusColor } from '../../utils/helpers';
 import { COLORS, SIZES, SHADOWS } from '../../theme';
+import Screen from '../../components/Screen';
 
 const TIMELINE = ['searching', 'assigned', 'picked_up', 'in_transit', 'delivered'];
 
@@ -25,14 +25,20 @@ export default function OrderHistoryDetail({ navigation, route }) {
   useEffect(() => { load(); }, [load]);
 
   if (loading || !order) {
-    return <SafeAreaView style={styles.center} edges={['top']}><ActivityIndicator color={COLORS.primary} size="large" /></SafeAreaView>;
+    return (
+      <Screen pad={false} edges={['top']}>
+        <View style={styles.center}>
+          <ActivityIndicator color={COLORS.primary} size="large" />
+        </View>
+      </Screen>
+    );
   }
 
   const color     = statusColor(order.status);
   const stepIndex = TIMELINE.indexOf(order.status);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen pad={false} edges={['top']} noKeyboard>
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={COLORS.primary} />}
@@ -107,12 +113,11 @@ export default function OrderHistoryDetail({ navigation, route }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: COLORS.background },
   center:       { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: SIZES.lg },
   backBtn:      { width: 40, height: 40, borderRadius: SIZES.radiusMd, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', ...SHADOWS.sm },

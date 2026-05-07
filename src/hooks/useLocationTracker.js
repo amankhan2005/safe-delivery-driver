@@ -2,20 +2,38 @@ import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import { updateLocation } from '../api';
 
+const MIN_UPDATE_GAP_MS = 8000;
+
 export default function useLocationTracker(enabled, intervalMs = 20000) {
-  const timerRef   = useRef(null);
-  const lastRef    = useRef(0);
+  const timerRef    = useRef(null);
+  const lastSentRef = useRef(0);
+  const mountedRef  = useRef(true);
+  const permGranted = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+  }, []);
+
+  useEffect(() => {
+    const stop = () => {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    };
+
+    if (!enabled) { stop(); return; }
 
     const send = async () => {
+      if (!mountedRef.current || !permGranted.current) return;
+      const now = Date.now();
+      if (now - lastSentRef.current < MIN_UPDATE_GAP_MS) return;
       try {
-        const now = Date.now();
-        if (now - lastRef.current < intervalMs / 2) return;
-        lastRef.current = now;
         const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!mountedRef.current) return;
         if (loc?.coords) {
+          lastSentRef.current = Date.now();
           await updateLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
         }
       } catch { /* silent */ }
@@ -23,20 +41,20 @@ export default function useLocationTracker(enabled, intervalMs = 20000) {
 
     const start = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted' || cancelled) return;
+        if (!permGranted.current) {
+          const { status } = await Location.requestForegroundPermissionsAsync();
+          if (!mountedRef.current) return;
+          permGranted.current = status === 'granted';
+        }
+        if (!permGranted.current) return;
         await send();
-        timerRef.current = setInterval(send, intervalMs);
+        if (mountedRef.current) {
+          timerRef.current = setInterval(send, Math.max(intervalMs, 15000));
+        }
       } catch { /* silent */ }
     };
 
-    const stop = () => {
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    };
-
-    if (enabled) start();
-    else stop();
-
-    return () => { cancelled = true; stop(); };
+    start();
+    return stop;
   }, [enabled, intervalMs]);
 }

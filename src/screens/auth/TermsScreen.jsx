@@ -1,11 +1,11 @@
 import React, { useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Platform, StatusBar,
+  View, Text, TouchableOpacity,
+  StyleSheet, StatusBar,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Button from '../../components/Button';
+import Screen from '../../components/Screen'; // ← common Screen component
 import { COLORS, SIZES, SHADOWS } from '../../theme';
 
 const SECTIONS = [
@@ -86,7 +86,6 @@ const SectionBlock = ({ section }) => (
 
 export default function TermsScreen({ navigation, route }) {
   const fromProfile = route?.params?.fromProfile === true;
-  const scrollRef = useRef(null);
   const [scrolledToEnd, setScrolledToEnd] = useState(false);
 
   const handleScroll = ({ nativeEvent }) => {
@@ -102,104 +101,112 @@ export default function TermsScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
 
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          style={styles.backBtn}
-        >
-          <Ionicons name="arrow-back" size={22} color={COLORS.gray700} />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Terms and Conditions</Text>
-          <Text style={styles.headerSub}>Safe Delivery — Liberia</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Scrollable content */}
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        onScroll={handleScroll}
-        scrollEventThrottle={32}
-        showsVerticalScrollIndicator={true}
+      <Screen
+        scroll
+        pad={false}
+        bg={COLORS.white}
+        edges={['top', 'bottom']}
+        noKeyboard
+        scrollProps={{
+          contentContainerStyle: styles.scrollContent,
+          onScroll: handleScroll,
+          scrollEventThrottle: 32,
+          showsVerticalScrollIndicator: true,
+          style: { backgroundColor: COLORS.background },
+        }}
       >
-        <View style={styles.effectiveBanner}>
-          <Ionicons name="information-circle-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.effectiveText}>
-            Effective Date: 1 May 2026 — Safe Delivery (Rider Partner Agreement, Liberia)
+
+        {/* ── Header ── */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.backBtn}
+          >
+            <Ionicons name="arrow-back" size={22} color={COLORS.gray700} />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Terms and Conditions</Text>
+            <Text style={styles.headerSub}>Safe Delivery — Liberia</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* ── Content ── */}
+        <View style={{ padding: SIZES.lg }}>
+          <View style={styles.effectiveBanner}>
+            <Ionicons name="information-circle-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.effectiveText}>
+              Effective Date: 1 May 2026 — Safe Delivery (Rider Partner Agreement, Liberia)
+            </Text>
+          </View>
+
+          <Text style={styles.preamble}>
+            These Terms and Conditions govern your use of the Safe Delivery rider platform. Please
+            read this document carefully before proceeding with registration.
           </Text>
+
+          {SECTIONS.map((s) => (
+            <SectionBlock key={s.number} section={s} />
+          ))}
+
+          <View style={styles.footerNote}>
+            <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.green} />
+            <Text style={styles.footerNoteText}>
+              Safe Delivery is committed to protecting your privacy and ensuring a safe, trusted
+              delivery network across Liberia.
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.preamble}>
-          These Terms and Conditions govern your use of the Safe Delivery rider platform. Please
-          read this document carefully before proceeding with registration.
-        </Text>
+        {/* ── Bottom Action (inside scroll so it stays at end) ── */}
+        {!fromProfile && (
+          <View style={styles.bottomBar}>
+            {!scrolledToEnd && (
+              <Text style={styles.scrollHint}>Scroll to read all terms before agreeing</Text>
+            )}
+            <Button
+              title="Agree and Continue"
+              onPress={handleAgree}
+              size="lg"
+              disabled={!scrolledToEnd}
+              icon={<Ionicons name="checkmark-circle-outline" size={18} color={COLORS.white} />}
+            />
+          </View>
+        )}
 
-        {SECTIONS.map((s) => (
-          <SectionBlock key={s.number} section={s} />
-        ))}
-
-        <View style={styles.footerNote}>
-          <Ionicons name="shield-checkmark-outline" size={18} color={COLORS.green} />
-          <Text style={styles.footerNoteText}>
-            Safe Delivery is committed to protecting your privacy and ensuring a safe, trusted
-            delivery network across Liberia.
-          </Text>
-        </View>
-      </ScrollView>
-
-      {/* Bottom action */}
-      {!fromProfile && (
-        <View style={styles.bottomBar}>
-          {!scrolledToEnd && (
-            <Text style={styles.scrollHint}>Scroll to read all terms before agreeing</Text>
-          )}
-          <Button
-            title="Agree and Continue"
-            onPress={handleAgree}
-            size="lg"
-            disabled={!scrolledToEnd}
-            icon={<Ionicons name="checkmark-circle-outline" size={18} color={COLORS.white} />}
-          />
-        </View>
-      )}
-    </SafeAreaView>
+      </Screen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  safe:               { flex: 1, backgroundColor: COLORS.white },
-  header:             { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SIZES.lg, paddingVertical: SIZES.md, backgroundColor: COLORS.white },
-  backBtn:            { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.gray100, alignItems: 'center', justifyContent: 'center' },
-  headerCenter:       { flex: 1, alignItems: 'center' },
-  headerTitle:        { fontSize: SIZES.fontLg, fontWeight: '700', color: COLORS.gray900 },
-  headerSub:          { fontSize: SIZES.fontXs, color: COLORS.gray500, marginTop: 2 },
-  divider:            { height: 1, backgroundColor: COLORS.border },
-  scroll:             { flex: 1, backgroundColor: COLORS.background },
-  scrollContent:      { padding: SIZES.lg, paddingBottom: SIZES.xxxl },
-  effectiveBanner:    { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.xs, backgroundColor: COLORS.primaryLight, borderRadius: SIZES.radiusMd, padding: SIZES.md, marginBottom: SIZES.md },
-  effectiveText:      { flex: 1, fontSize: SIZES.fontXs, color: COLORS.primary, fontWeight: '600', lineHeight: 17 },
-  preamble:           { fontSize: SIZES.fontMd, color: COLORS.gray700, lineHeight: 22, marginBottom: SIZES.lg },
-  section:            { backgroundColor: COLORS.white, borderRadius: SIZES.radiusLg, padding: SIZES.lg, marginBottom: SIZES.md, ...SHADOWS.sm },
-  sectionHeader:      { flexDirection: 'row', alignItems: 'center', gap: SIZES.sm, marginBottom: SIZES.md },
-  sectionNumber:      { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  sectionNumberText:  { color: COLORS.white, fontSize: SIZES.fontSm, fontWeight: '700' },
-  sectionTitle:       { fontSize: SIZES.fontLg, fontWeight: '700', color: COLORS.gray900, flex: 1 },
-  intro:              { fontSize: SIZES.fontMd, color: COLORS.gray700, lineHeight: 22, marginBottom: SIZES.sm },
-  bulletRow:          { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.sm, marginBottom: SIZES.sm },
-  bullet:             { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginTop: 7 },
-  bulletText:         { flex: 1, fontSize: SIZES.fontMd, color: COLORS.gray700, lineHeight: 22 },
-  footerNote:         { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.sm, backgroundColor: COLORS.greenLight, borderRadius: SIZES.radiusMd, padding: SIZES.md, marginTop: SIZES.md },
-  footerNoteText:     { flex: 1, fontSize: SIZES.fontSm, color: COLORS.gray700, lineHeight: 18 },
-  bottomBar:          { padding: SIZES.lg, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.border, gap: SIZES.sm, ...SHADOWS.md },
-  scrollHint:         { fontSize: SIZES.fontXs, color: COLORS.gray400, textAlign: 'center' },
+  header:            { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SIZES.lg, paddingVertical: SIZES.md, backgroundColor: COLORS.white },
+  backBtn:           { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.gray100, alignItems: 'center', justifyContent: 'center' },
+  headerCenter:      { flex: 1, alignItems: 'center' },
+  headerTitle:       { fontSize: SIZES.fontLg, fontWeight: '700', color: COLORS.gray900 },
+  headerSub:         { fontSize: SIZES.fontXs, color: COLORS.gray500, marginTop: 2 },
+  divider:           { height: 1, backgroundColor: COLORS.border },
+  scrollContent:     { flexGrow: 1, paddingBottom: SIZES.xxxl },
+  effectiveBanner:   { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.xs, backgroundColor: COLORS.primaryLight, borderRadius: SIZES.radiusMd, padding: SIZES.md, marginBottom: SIZES.md },
+  effectiveText:     { flex: 1, fontSize: SIZES.fontXs, color: COLORS.primary, fontWeight: '600', lineHeight: 17 },
+  preamble:          { fontSize: SIZES.fontMd, color: COLORS.gray700, lineHeight: 22, marginBottom: SIZES.lg },
+  section:           { backgroundColor: COLORS.white, borderRadius: SIZES.radiusLg, padding: SIZES.lg, marginBottom: SIZES.md, ...SHADOWS.sm },
+  sectionHeader:     { flexDirection: 'row', alignItems: 'center', gap: SIZES.sm, marginBottom: SIZES.md },
+  sectionNumber:     { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  sectionNumberText: { color: COLORS.white, fontSize: SIZES.fontSm, fontWeight: '700' },
+  sectionTitle:      { fontSize: SIZES.fontLg, fontWeight: '700', color: COLORS.gray900, flex: 1 },
+  intro:             { fontSize: SIZES.fontMd, color: COLORS.gray700, lineHeight: 22, marginBottom: SIZES.sm },
+  bulletRow:         { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.sm, marginBottom: SIZES.sm },
+  bullet:            { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.primary, marginTop: 7 },
+  bulletText:        { flex: 1, fontSize: SIZES.fontMd, color: COLORS.gray700, lineHeight: 22 },
+  footerNote:        { flexDirection: 'row', alignItems: 'flex-start', gap: SIZES.sm, backgroundColor: COLORS.greenLight, borderRadius: SIZES.radiusMd, padding: SIZES.md, marginTop: SIZES.md },
+  footerNoteText:    { flex: 1, fontSize: SIZES.fontSm, color: COLORS.gray700, lineHeight: 18 },
+  bottomBar:         { margin: SIZES.lg, marginTop: 0, gap: SIZES.sm },
+  scrollHint:        { fontSize: SIZES.fontXs, color: COLORS.gray400, textAlign: 'center' },
 });

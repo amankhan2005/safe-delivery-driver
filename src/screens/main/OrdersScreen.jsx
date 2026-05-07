@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  RefreshControl, ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { getRiderOrders } from '../../api';
 import { fmtCurrency, fmtDateTime, fmtStatus, statusColor } from '../../utils/helpers';
 import { COLORS, SIZES, SHADOWS } from '../../theme';
+import Screen from '../../components/Screen'; // ← common Screen component
 
 export default function OrdersScreen({ navigation }) {
   const [orders,     setOrders]     = useState([]);
@@ -15,7 +18,6 @@ export default function OrdersScreen({ navigation }) {
     try {
       const res = await getRiderOrders();
       const all = res?.data?.data?.orders || [];
-      // Show history: delivered + cancelled
       setOrders(all.filter((o) => ['delivered', 'cancelled'].includes(o.status)));
     } catch { /* silent */ }
     finally { setLoading(false); setRefreshing(false); }
@@ -61,23 +63,40 @@ export default function OrdersScreen({ navigation }) {
     );
   };
 
+  // Loading state
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>;
+    return (
+      <Screen pad={false} edges={['top']}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </Screen>
+    );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <Screen pad={false} edges={['top']} noKeyboard>
+
+      {/* ── Header ── */}
       <View style={styles.header}>
         <Text style={styles.title}>Delivery History</Text>
         <Text style={styles.count}>{orders.length} orders</Text>
       </View>
+
+      {/* ── FlatList (handles its own scroll) ── */}
       <FlatList
         data={orders}
         keyExtractor={(item) => item._id}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={COLORS.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); load(); }}
+            tintColor={COLORS.primary}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="cube-outline" size={48} color={COLORS.gray200} />
@@ -86,12 +105,12 @@ export default function OrdersScreen({ navigation }) {
           </View>
         }
       />
-    </SafeAreaView>
+
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container:  { flex: 1, backgroundColor: COLORS.background },
   center:     { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header:     { padding: SIZES.lg, paddingTop: SIZES.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title:      { fontSize: SIZES.fontXxl, fontWeight: '700', color: COLORS.gray900 },
