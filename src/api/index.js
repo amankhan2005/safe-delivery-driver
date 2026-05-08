@@ -1,11 +1,10 @@
- import axios from 'axios';
-
+import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL  = 'https://safe-delivery-backend.onrender.com/api';
 const TOKEN_KEY = 'sd_rider_token';
 
-// ─── In-memory token cache (avoids AsyncStorage read on every request) ────────
+// ─── In-memory token cache ────────────────────────────────────────────────────
 let _cachedToken = null;
 
 export function setMemoryToken(token) { _cachedToken = token; }
@@ -18,10 +17,9 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ─── Request interceptor: attach Bearer token ─────────────────────────────────
+// ─── Request interceptor ──────────────────────────────────────────────────────
 api.interceptors.request.use(async (config) => {
   try {
-    // Try memory cache first, fall back to AsyncStorage
     let token = _cachedToken;
     if (!token) {
       token = await AsyncStorage.getItem(TOKEN_KEY);
@@ -34,13 +32,12 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// ─── Response interceptor: handle auth errors ─────────────────────────────────
+// ─── Response interceptor ─────────────────────────────────────────────────────
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     if (error?.response?.status === 401) {
       clearMemoryToken();
-      // Dynamically import to avoid circular dependency
       try {
         const { default: useAuthStore } = await import('../store/authStore');
         const { logout } = useAuthStore.getState();
@@ -51,7 +48,6 @@ api.interceptors.response.use(
   }
 );
 
-// ─── Backend ping (warms up Render free-tier cold start) ──────────────────────
 export const pingBackend = () =>
   api.get('/health', { timeout: 8_000 }).catch(() => {});
 
@@ -62,7 +58,8 @@ export const riderSignup = (formData) =>
     transformRequest: (data) => data,
   });
 
-export const riderVerifyPhoneOTP  = (data) => api.post('/auth/rider-verify-phone-otp', data);
+export const riderSendPhoneOTP    = (data) => api.post('/auth/rider-send-phone-otp', data);  // NEW
+export const riderVerifyPhoneOTP  = (data) => api.post('/auth/rider-verify-phone-otp', data); // payload: {phone, otp}
 export const riderVerifyEmailOTP  = (data) => api.post('/auth/rider-verify-email-otp', data);
 export const riderResendEmailOTP  = (data) => api.post('/auth/rider-resend-email-otp', data);
 export const riderLogin           = (data) => api.post('/auth/rider-login', data);

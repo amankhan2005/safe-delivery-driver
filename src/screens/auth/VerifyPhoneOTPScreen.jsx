@@ -7,26 +7,13 @@ import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import Screen from '../../components/Screen';
 import Button from '../../components/Button';
-import { riderVerifyPhoneOTP, riderVerifyEmailOTP, riderResendEmailOTP } from '../../api';
+import { riderSendPhoneOTP, riderVerifyPhoneOTP, riderVerifyEmailOTP, riderResendEmailOTP } from '../../api';
 import useAuthStore from '../../store/authStore';
 import { COLORS, SIZES } from '../../theme';
 
-let firebaseAuth = null;
-let FirebasePhoneAuthProvider = null;
-let firebaseSignInWithCredential = null;
-
-try {
-  const fb = require('../../config/firebase');
-  firebaseAuth = fb.auth;
-  FirebasePhoneAuthProvider = fb.PhoneAuthProvider;
-  firebaseSignInWithCredential = fb.signInWithCredential;
-} catch (e) {
-  console.warn('[Firebase Rider] Not loaded:', e.message);
-}
-
 const maskPhone = (p = '') => p.length > 6 ? p.slice(0, 5) + '****' + p.slice(-2) : p;
 
-function OTPBox({ value, onChange, length = 4 }) {
+function OTPBox({ value, onChange, length = 6 }) {
   const inputs = useRef([]);
   const vals   = Array(length).fill('').map((_, i) => value[i] || '');
 
@@ -60,59 +47,59 @@ export default function VerifyPhoneOTPScreen({ navigation, route }) {
 
   const [tab,            setTab]            = useState('email');
   const [phoneOtp,       setPhoneOtp]       = useState('');
-  const [verificationId, setVerificationId] = useState(null);
-  const [sendingPhone,   setSendingPhone]   = useState(false);
+  const [smsSent,        setSmsSent]        = useState(false);
+  const [sendingSms,     setSendingSms]     = useState(false);
   const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [phoneCooldown,  setPhoneCooldown]  = useState(0);
   const [emailOtp,       setEmailOtp]       = useState('');
-  const [cooldown,       setCooldown]       = useState(60);
+  const [emailCooldown,  setEmailCooldown]  = useState(60);
   const [verifyingEmail, setVerifyingEmail] = useState(false);
 
+  // Email cooldown timer
   useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setInterval(() => setCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+    if (emailCooldown <= 0) return;
+    const t = setInterval(() => setEmailCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const sendFirebaseOTP = async () => {
-    if (!firebaseAuth || !FirebasePhoneAuthProvider) {
-      return Toast.show({ type: 'error', text1: 'Firebase not available', text2: 'Use Email OTP.' });
-    }
-    setSendingPhone(true);
+  // Phone resend cooldown timer
+  useEffect(() => {
+    if (phoneCooldown <= 0) return;
+    const t = setInterval(() => setPhoneCooldown((c) => (c > 0 ? c - 1 : 0)), 1000);
+    return () => clearInterval(t);
+  }, [phoneCooldown]);
+
+  // ── Send SMS OTP via Twilio (backend) ─────────────────────────────────────
+  const handleSendSmsOTP = async () => {
+    if (phoneCooldown > 0) return;
+    setSendingSms(true);
     try {
-      const provider = new FirebasePhoneAuthProvider(firebaseAuth);
-      const vid = await provider.verifyPhoneNumber(
-        phone,
-        firebaseAuth._forceRecaptchaFlowForTesting
-          ? firebaseAuth._forceRecaptchaFlowForTesting
-          : { verify: async () => {} }
-      );
-      setVerificationId(vid);
-      Toast.show({ type: 'success', text1: `SMS sent to ${maskPhone(phone)}` });
+      await riderSendPhoneOTP({ phone });
+      setSmsSent(true);
+      setPhoneCooldown(60);
+      setPhoneOtp('');
+      Toast.show({ type: 'success', text1: `📲 SMS sent to ${maskPhone(phone)}` });
     } catch (e) {
-      console.error('[Firebase] Phone OTP error:', e.code, e.message);
-      let msg = 'Failed to send SMS';
-      if (e.code === 'auth/invalid-phone-number') msg = 'Invalid phone format';
-      else if (e.code === 'auth/too-many-requests') msg = 'Too many requests. Try email OTP.';
-      Toast.show({ type: 'error', text1: msg, text2: 'Use Email OTP instead.' });
-    } finally { setSendingPhone(false); }
+      console.error('[RiderVerify] Send SMS failed:', e?.response?.data || e.message);
+      const msg = e?.response?.data?.message || 'Failed to send SMS. Try email OTP.';
+      Toast.show({ type: 'error', text1: msg });
+      setTimeout(() => setTab('email'), 1500);
+    } finally {
+      setSendingSms(false);
+    }
   };
 
   const handleVerifyPhone = async () => {
     if (phoneOtp.length !== 6) return Toast.show({ type: 'error', text1: 'Enter 6-digit code' });
-    if (!verificationId) return Toast.show({ type: 'error', text1: 'Send SMS first' });
+    if (!smsSent) return Toast.show({ type: 'error', text1: 'Send SMS first' });
     setVerifyingPhone(true);
     try {
-      const credential = FirebasePhoneAuthProvider.credential(verificationId, phoneOtp);
-      const userCred   = await firebaseSignInWithCredential(firebaseAuth, credential);
-      const idToken    = await userCred.user.getIdToken();
-      const res = await riderVerifyPhoneOTP({ phone, firebaseIdToken: idToken });
+      const res = await riderVerifyPhoneOTP({ phone, otp: phoneOtp });
       const { token, rider } = res.data.data;
       await setAuth(token, rider);
       Toast.show({ type: 'success', text1: '✅ Phone verified! Account created.' });
     } catch (e) {
-      let msg = e.response?.data?.message || 'Verification failed';
-      if (e.code === 'auth/invalid-verification-code') msg = 'Wrong code.';
-      Toast.show({ type: 'error', text1: msg });
+      Toast.show({ type: 'error', text1: e?.response?.data?.message || 'Verification failed' });
     } finally { setVerifyingPhone(false); }
   };
 
@@ -125,18 +112,19 @@ export default function VerifyPhoneOTPScreen({ navigation, route }) {
       await setAuth(token, rider);
       Toast.show({ type: 'success', text1: '✅ Email verified! Account created.' });
     } catch (e) {
-      Toast.show({ type: 'error', text1: e.response?.data?.message || 'Invalid OTP' });
+      Toast.show({ type: 'error', text1: e?.response?.data?.message || 'Invalid OTP' });
     } finally { setVerifyingEmail(false); }
   };
 
-  const handleResend = async () => {
-    if (cooldown > 0) return;
+  const handleResendEmail = async () => {
+    if (emailCooldown > 0) return;
     try {
       await riderResendEmailOTP({ email, name });
-      setCooldown(60); setEmailOtp('');
+      setEmailCooldown(60);
+      setEmailOtp('');
       Toast.show({ type: 'success', text1: '📧 OTP resent' });
     } catch (e) {
-      Toast.show({ type: 'error', text1: e.response?.data?.message || 'Failed' });
+      Toast.show({ type: 'error', text1: e?.response?.data?.message || 'Failed' });
     }
   };
 
@@ -174,9 +162,9 @@ export default function VerifyPhoneOTPScreen({ navigation, route }) {
             <Text style={S.label}>Enter OTP</Text>
             <OTPBox value={emailOtp} onChange={setEmailOtp} length={4} />
             <Button title="Verify Email & Create Account" onPress={handleVerifyEmail} loading={verifyingEmail} size="lg" style={S.btn} />
-            <TouchableOpacity onPress={handleResend} disabled={cooldown > 0} style={S.resendWrap}>
-              <Text style={[S.resend, cooldown > 0 && S.resendOff]}>
-                {cooldown > 0 ? `Resend in ${cooldown}s` : '📧 Resend OTP'}
+            <TouchableOpacity onPress={handleResendEmail} disabled={emailCooldown > 0} style={S.resendWrap}>
+              <Text style={[S.resend, emailCooldown > 0 && S.resendOff]}>
+                {emailCooldown > 0 ? `Resend in ${emailCooldown}s` : '📧 Resend OTP'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -189,16 +177,19 @@ export default function VerifyPhoneOTPScreen({ navigation, route }) {
               <Text style={S.noteTxt}>
                 {'6-digit SMS to '}
                 <Text style={{ fontWeight: '700' }}>{maskPhone(phone)}</Text>
-                {'   '}
+                {' via Twilio SMS'}
               </Text>
             </View>
             <Button
-              title={verificationId ? 'Resend SMS' : 'Send SMS Code'}
-              onPress={sendFirebaseOTP} loading={sendingPhone}
-              variant={verificationId ? 'outline' : 'primary'} size="md"
+              title={phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : smsSent ? 'Resend SMS' : 'Send SMS Code'}
+              onPress={handleSendSmsOTP}
+              loading={sendingSms}
+              disabled={phoneCooldown > 0}
+              variant={smsSent ? 'outline' : 'primary'}
+              size="md"
               style={{ marginBottom: SIZES.lg }}
             />
-            {verificationId && (
+            {smsSent && (
               <>
                 <Text style={S.label}>Enter 6-digit SMS Code</Text>
                 <OTPBox value={phoneOtp} onChange={setPhoneOtp} length={6} />
@@ -232,7 +223,7 @@ const S = StyleSheet.create({
   noteTxt:  { flex: 1, fontSize: SIZES.fontXs, color: COLORS.primary, lineHeight: 16 },
   label:    { fontSize: SIZES.fontSm, fontWeight: '600', color: COLORS.gray700, marginBottom: SIZES.sm },
   otpRow:   { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: SIZES.md },
-  otpBox:   { width: 46, height: 54, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, fontSize: 20, fontWeight: '700', color: COLORS.gray900, backgroundColor: '#fff', textAlign: 'center' },
+  otpBox:   { width: 44, height: 54, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, fontSize: 20, fontWeight: '700', color: COLORS.gray900, backgroundColor: '#fff', textAlign: 'center' },
   otpFilled:{ borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
   btn:       { marginTop: SIZES.sm, marginBottom: SIZES.md },
   resendWrap:{ alignItems: 'center', paddingVertical: SIZES.sm },
