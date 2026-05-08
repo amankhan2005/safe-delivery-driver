@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   toggleOnline, getDashboard, acceptOrder, rejectOrder,
-  getNotifications, markNotificationRead,
+  getNotifications, markNotificationRead, getEarnings,   // ✅ added getEarnings
 } from '../../api';
 import useAuthStore from '../../store/authStore';
 import useOrderStore from '../../store/orderStore';
@@ -140,13 +140,18 @@ export default function HomeScreen({ navigation }) {
   const setAvailableOrders = useOrderStore((s) => s.setAvailableOrders);
 
   const [dash,         setDash]         = useState(null);
-  const [loading,      setLoading]      = useState(false); // FIX: false — show cached data instantly
+  const [loading,      setLoading]      = useState(false);
   const [refreshing,   setRefreshing]   = useState(false);
   const [toggling,     setToggling]     = useState(false);
   const [actingId,     setActingId]     = useState(null);
   const [notifOpen,    setNotifOpen]    = useState(false);
   const [notifs,       setNotifs]       = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
+
+  // ✅ Earnings state — today / monthly / yearly
+  const [earningsToday,   setEarningsToday]   = useState(0);
+  const [earningsMonthly, setEarningsMonthly] = useState(0);
+  const [earningsYearly,  setEarningsYearly]  = useState(0);
 
   const mountedRef   = useRef(true);
   const isFirstFocus = useRef(true);
@@ -161,14 +166,28 @@ export default function HomeScreen({ navigation }) {
   const firstName  = rider?.name?.split(' ')[0] || 'Rider';
   const initial    = rider?.name?.[0]?.toUpperCase() || '?';
   const photoUrl   = rider?.profilePhoto?.url || null;
-  const today      = dash?.earnings?.today   ?? rider?.earnings?.today   ?? 0;
   const totalTrips = dash?.totalTrips        ?? rider?.totalTrips        ?? 0;
   const rating     = dash?.rating            ?? rider?.rating            ?? 0;
-  const balance    = dash?.earnings?.balance ?? rider?.earnings?.balance ?? 0;
 
   useLocationTracker(isOnline, 20000);
 
-  // FIX: Show cached rider data immediately, load dashboard in background
+  // ✅ Load all three earning periods in parallel
+  const loadEarnings = useCallback(async () => {
+    try {
+      const [rDay, rMonth, rYear] = await Promise.all([
+        getEarnings('daily'),
+        getEarnings('monthly'),
+        getEarnings('yearly'),
+      ]);
+      if (!mountedRef.current) return;
+      setEarningsToday(rDay?.data?.data?.periodEarnings     ?? 0);
+      setEarningsMonthly(rMonth?.data?.data?.periodEarnings ?? 0);
+      setEarningsYearly(rYear?.data?.data?.periodEarnings   ?? 0);
+    } catch {
+      // silent — show zeros if fails
+    }
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const dR = await getDashboard();
@@ -184,8 +203,7 @@ export default function HomeScreen({ navigation }) {
         });
       }
     } catch {
-      // silent — dashboard failure is non-critical
-      // rider data from store still shows
+      // silent
     } finally {
       if (mountedRef.current) { setLoading(false); setRefreshing(false); }
     }
@@ -205,19 +223,19 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
-  // Mount — load dashboard in background, don't block UI
   useEffect(() => {
     load();
+    loadEarnings(); // ✅ load earnings on mount
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Focus — reload dashboard when coming back to screen
   useFocusEffect(useCallback(() => {
     if (isFirstFocus.current) {
       isFirstFocus.current = false;
       return;
     }
     load();
-  }, [load]));
+    loadEarnings(); // ✅ reload earnings on focus
+  }, [load, loadEarnings]));
 
   const handleToggle = async () => {
     if (toggling) return;
@@ -239,7 +257,6 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // FIX: Accept — wait for store update before navigating to ActiveOrder
   const handleAccept = useCallback(async (id) => {
     if (actingId) return;
     setActingId(id);
@@ -251,11 +268,8 @@ export default function HomeScreen({ navigation }) {
         setActiveOrder(order);
         setAvailableOrders([]);
         Toast.show({ type: 'success', text1: '✅ Order accepted!', text2: 'Heading to pickup' });
-        // FIX: 300ms delay — let store update before ActiveOrderScreen mounts
         setTimeout(() => {
-          if (mountedRef.current) {
-            navigation.navigate('ActiveOrder', { orderId: id });
-          }
+          if (mountedRef.current) navigation.navigate('ActiveOrder', { orderId: id });
         }, 300);
       } else {
         Toast.show({ type: 'error', text1: 'Could not accept', text2: 'Please try again' });
@@ -323,7 +337,7 @@ export default function HomeScreen({ navigation }) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(); }}
+            onRefresh={() => { setRefreshing(true); load(); loadEarnings(); }}
             tintColor={BRAND}
           />
         }
@@ -359,17 +373,34 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* ✅ Three earnings stats: Today / This Month / This Year */}
           <View style={s.bannerStats}>
-            <View style={s.bannerStat}>
-              <Text style={s.bannerStatVal}>{fmtCurrency(today)}</Text>
-              <Text style={s.bannerStatLabel}>Today's Earnings</Text>
-            </View>
+            <TouchableOpacity
+              style={s.bannerStat}
+              onPress={() => navigation.navigate('Earnings', { period: 'daily' })}
+              activeOpacity={0.8}
+            >
+              <Text style={s.bannerStatVal}>{fmtCurrency(earningsToday)}</Text>
+              <Text style={s.bannerStatLabel}>Today</Text>
+            </TouchableOpacity>
             <View style={s.bannerStatDiv} />
-            <View style={s.bannerStat}>
-              <Text style={s.bannerStatVal}>{totalTrips}</Text>
-              <Text style={s.bannerStatLabel}>Trips</Text>
-            </View>
-            
+            <TouchableOpacity
+              style={s.bannerStat}
+              onPress={() => navigation.navigate('Earnings', { period: 'monthly' })}
+              activeOpacity={0.8}
+            >
+              <Text style={s.bannerStatVal}>{fmtCurrency(earningsMonthly)}</Text>
+              <Text style={s.bannerStatLabel}>This Month</Text>
+            </TouchableOpacity>
+            <View style={s.bannerStatDiv} />
+            <TouchableOpacity
+              style={s.bannerStat}
+              onPress={() => navigation.navigate('Earnings', { period: 'yearly' })}
+              activeOpacity={0.8}
+            >
+              <Text style={s.bannerStatVal}>{fmtCurrency(earningsYearly)}</Text>
+              <Text style={s.bannerStatLabel}>This Year</Text>
+            </TouchableOpacity>
           </View>
 
           {rider?.vehicle?.plate && (
@@ -485,15 +516,15 @@ export default function HomeScreen({ navigation }) {
           <Text style={s.sectionTitle}>Quick Actions</Text>
           <View style={s.qaRow}>
             {[
-              { icon: 'list-outline',   color: BRAND,     bg: '#EFF6FF', label: 'My Orders', screen: 'Orders'   },
-              { icon: 'bar-chart',      color: '#16A34A', bg: '#F0FDF4', label: 'Earnings',  screen: 'Earnings' },
-              { icon: 'card-outline',   color: '#D97706', bg: '#FFFBEB', label: 'Payouts',   screen: 'Earnings' },
-              { icon: 'person-outline', color: '#7C3AED', bg: '#F5F3FF', label: 'Profile',   screen: 'Profile'  },
+              { icon: 'list-outline',   color: BRAND,     bg: '#EFF6FF', label: 'My Orders', screen: 'Orders',   params: undefined },
+              { icon: 'bar-chart',      color: '#16A34A', bg: '#F0FDF4', label: 'Earnings',  screen: 'Earnings', params: { period: 'daily'   } }, // ✅
+              { icon: 'card-outline',   color: '#D97706', bg: '#FFFBEB', label: 'Payouts',   screen: 'Earnings', params: { period: 'monthly' } }, // ✅
+              { icon: 'person-outline', color: '#7C3AED', bg: '#F5F3FF', label: 'Profile',   screen: 'Profile',  params: undefined },
             ].map(qa => (
               <TouchableOpacity
                 key={qa.label}
                 style={s.qaItem}
-                onPress={() => navigation.navigate(qa.screen)}
+                onPress={() => navigation.navigate(qa.screen, qa.params)}
                 activeOpacity={0.75}
               >
                 <View style={[s.qaIcon, { backgroundColor: qa.bg }]}>
@@ -509,7 +540,7 @@ export default function HomeScreen({ navigation }) {
         <View style={s.section}>
           <View style={s.sectionHdr}>
             <Text style={s.sectionTitle}>Today's Summary</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Earnings')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Earnings', { period: 'daily' })}>
               <Text style={s.seeAll}>See All</Text>
             </TouchableOpacity>
           </View>

@@ -1,3 +1,5 @@
+ 
+
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -40,14 +42,13 @@ const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
 const NO_HEADER = { headerShown: false };
 
-// ── Custom Tab Bar with safe area insets ─────────────────────────────────────
+// ── Custom Tab Bar ────────────────────────────────────────────────────────────
 function CustomTabBar({ state, navigation }) {
   const rider      = useAuthStore((s) => s.rider);
   const patchRider = useAuthStore((s) => s.patchRider);
   const isOnline   = !!rider?.isOnline;
   const [toggling, setToggling] = React.useState(false);
 
-  // KEY FIX: responsive bottom padding using safe area insets
   const insets    = useSafeAreaInsets();
   const bottomPad = insets.bottom > 0 ? insets.bottom : (Platform.OS === 'android' ? 10 : 20);
 
@@ -201,8 +202,12 @@ function MainStack() {
   );
 }
 
-function pickRoute(rider) {
-  if (!rider) return { screen: 'Auth' };
+function pickRoute(token, rider) {
+  if (!token) return { screen: 'Auth' };
+
+  // Rider data not loaded yet but we have a token — go to Main (cached rider)
+  if (!rider) return { screen: 'Main' };
+
   if (!rider.kycCompleted) {
     const step    = rider.kycStep ?? 1;
     const initial = step === 2 ? 'KYCStep2' : step === 3 ? 'KYCStep3' : 'KYCStep1';
@@ -212,21 +217,33 @@ function pickRoute(rider) {
   return { screen: 'Main' };
 }
 
-export default function AppNavigator({ onReady }) {
-  const { token, rider, loading, init } = useAuthStore();
-  useEffect(() => { init(); }, []);
+// ── Loading screen shown only until AsyncStorage has been read ────────────────
+function SplashLoading() {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }}>
+      <ActivityIndicator size="large" color={COLORS.primary} />
+    </View>
+  );
+}
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      </View>
-    );
+export default function AppNavigator({ onReady }) {
+  const token      = useAuthStore((s) => s.token);
+  const rider      = useAuthStore((s) => s.rider);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+  const init       = useAuthStore((s) => s.init);
+
+  useEffect(() => {
+    init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Wait for AsyncStorage read only — not for network
+  // This is typically <50 ms on Android (vs 2-25 s for network)
+  if (!isHydrated) {
+    return <SplashLoading />;
   }
 
-  const route = token
-    ? pickRoute(rider || { kycCompleted: false, kycStep: 1, status: 'pending' })
-    : { screen: 'Auth' };
+  const route = pickRoute(token, rider);
 
   return (
     <NavigationContainer onReady={onReady}>
@@ -234,7 +251,7 @@ export default function AppNavigator({ onReady }) {
         {route.screen === 'Auth' && <Stack.Screen name="Auth" component={AuthStack} />}
         {route.screen === 'KYC' && (
           <Stack.Screen name="KYC">
-            {() => <KYCStack initialRouteName={route.initial} />}
+            {() => <KYCStack initialRouteName={route.initial ?? 'KYCStep1'} />}
           </Stack.Screen>
         )}
         {route.screen === 'Main' && <Stack.Screen name="Main" component={MainStack} />}

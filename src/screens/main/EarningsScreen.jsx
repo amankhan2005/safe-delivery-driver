@@ -5,10 +5,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { getRiderEarnings } from '../../api';
+import { getEarnings } from '../../api';                          // ✅ FIXED
 import { fmtCurrency, fmtDate, fmtStatus, statusColor } from '../../utils/helpers';
 import { COLORS, SIZES, SHADOWS } from '../../theme';
-import Screen from '../../components/Screen'; // ← common Screen component
+import Screen from '../../components/Screen';
 
 const BRAND = COLORS.primary;
 
@@ -18,15 +18,15 @@ const PERIODS = [
   { key: 'yearly',  label: 'This Year',  icon: 'stats-chart-outline' },
 ];
 
-export default function EarningsScreen() {
-  const [period,     setPeriod]     = useState('daily');
+export default function EarningsScreen({ route }) {
+  const [period,     setPeriod]     = useState(route?.params?.period || 'daily'); // ✅ accepts period from HomeScreen
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await getRiderEarnings(period);
+      const res = await getEarnings(period);                      // ✅ FIXED
       setData(res?.data?.data || null);
     } catch (e) {
       console.log('Earnings fetch error:', e?.response?.data || e.message);
